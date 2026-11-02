@@ -1,2 +1,5 @@
 .vscode/settings.json
 bin/
+.venv/
+*.egg-info/
+__pycache__/

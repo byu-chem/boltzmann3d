@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "boltzmann3d"
+version = "0.1.0"
+description = "A Python desktop kinetic theory demonstrator"
+requires-python = ">=3.10"
+dependencies = ["panda3d>=1.10.16,<1.11"]
+
+[project.scripts]
+boltzmann3d = "boltzmann3d.app:main"
+
+[tool.setuptools]
+package-dir = {"" = "python"}
+
+[tool.setuptools.packages.find]
+where = ["python"]
