@@ -1,0 +1,11 @@
+{
+  "tag": "v3.0.0",
+  "title": "Boltzmann3d release 3.0",
+  "source_commit": "336134bf089d2981cacaffcd83023be83d7eba63",
+  "source_run": 41923289615,
+  "notes": ".github/releases/3.0.md",
+  "assets": [
+    "Boltzmann3D-3.0.0.dmg",
+    "Boltzmann3D-3.0.0.exe"
+  ]
+}
