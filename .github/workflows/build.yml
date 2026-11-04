@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  checks: write
 
 jobs:
   build:
@@ -37,7 +38,26 @@ jobs:
         run: choco install ant --no-progress --yes
       - name: Build and check settings and physics
         shell: bash
-        run: ant -noinput clean test dist
+        run: ant -noinput clean test dist 2>&1 | tee build.log
+      - name: Attach compiler diagnostics to the commit checks
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('build.log')) return;
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head_sha: context.sha,
+              name: 'Build diagnostics (${{ matrix.artifact }})',
+              status: 'completed',
+              conclusion: 'failure',
+              output: {
+                title: 'Ant build output',
+                summary: '```text\n' + fs.readFileSync('build.log', 'utf8').slice(-60000) + '\n```'
+              }
+            });
       - uses: actions/upload-artifact@v4
         with:
           name: Boltzmann3D-${{ matrix.artifact }}
