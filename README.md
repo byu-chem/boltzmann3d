@@ -90,8 +90,8 @@ On both targets, manually check:
 ## Application packaging
 
 Packages include their own Java 25 runtime, JOGL libraries and matching natives.
-Users do not need Java, Ant or Homebrew installed. The initial package version
-is 3.1.0; override it with `-Dapp.version=3.1.1` for a subsequent package.
+Users do not need Java, Ant or Homebrew installed. The package version
+is 3.1.1; override it with `-Dapp.version=3.1.2` for a subsequent package.
 
 On Apple Silicon, select the ARM64 JDK explicitly (Homebrew's Ant may otherwise
 choose its own newer JDK), then build:
@@ -105,7 +105,7 @@ ant package
 Outputs:
 
 - `packages/images/Boltzmann3D.app` — the standalone Mac app.
-- `packages/installers/Boltzmann3D-3.1.0.dmg` — open it and drag the app to Applications.
+- `packages/installers/Boltzmann3D-3.1.1.dmg` — open it and drag the app to Applications.
 
 `ant package` needs normal desktop access for macOS disk-image tooling.
 `ant package-image` builds just the app; `ant test-packaged` checks the shipped
@@ -127,7 +127,7 @@ ant package
 Outputs:
 
 - `packages/images/Boltzmann3D/` — a portable app directory with Boltzmann3D.exe.
-- `packages/installers/Boltzmann3D-3.1.0.exe` — a per-user installer with a Start
+- `packages/installers/Boltzmann3D-3.1.1.exe` — a per-user installer with a Start
   menu entry, desktop shortcut and uninstall support.
 
 Packages must be built on their target operating system. GitHub Actions builds
@@ -166,3 +166,7 @@ rejects a particle that fills the 2D framebuffer.
 File → Preset simulations provides the 27 original `.set` files, grouped into 2D and 3D examples. These were recovered unchanged from the original Boltzmann.app distribution (V2.43–V2.48 settings). The current startup default remains separate; “Original default” opens the older saved example.
 
 Presets are embedded in the application JAR and also shipped as ordinary files in `presets/` beside the JAR (on macOS, inside `Boltzmann3D.app/Contents/app/`). Use File → Load to open an edited copy.
+
+### Preset loading fix (3.1.1)
+
+Simulation replacement wakes the display worker and lets its current OpenGL call finish, rather than interrupting macOS graphics dispatch. Shutdown flags are visible across threads, paused physics waits are released, and queued statistics updates are limited to their original simulation. The lifecycle regression switches all presets while running and paused, including shutdown during an AWT render; macOS graphics checks also exercise live preset replacement.

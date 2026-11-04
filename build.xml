@@ -79,6 +79,10 @@
             <classpath><path refid="runtime.classpath"/><pathelement location="${test.bin}"/></classpath>
             <jvmarg value="-Djava.awt.headless=true"/>
         </java>
+        <java classname="edu.byu.chem.boltzmann.controller.ThreadLifecycleSmokeTest" fork="true" failonerror="true" timeout="60000">
+            <classpath><path refid="runtime.classpath"/><pathelement location="${test.bin}"/></classpath>
+            <jvmarg value="-Djava.awt.headless=true"/>
+        </java>
     </target>
 
     <target name="test-render" depends="test,native-deps" description="Check rendered particle pixels (requires a display)">

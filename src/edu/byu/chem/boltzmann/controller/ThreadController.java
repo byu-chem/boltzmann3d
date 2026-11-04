@@ -56,9 +56,10 @@ class ThreadController {
     }
     
     private final Controller root;
+    private volatile long generation;
     
-    private boolean frameAvailable = false;
-    private boolean runSimulationThreads = false;
+    private volatile boolean frameAvailable = false;
+    private volatile boolean runSimulationThreads = false;
     
     private final BinarySemaphore lastFrameDisplayed = new BinarySemaphore(false);
     private final BinarySemaphore frameReady = new BinarySemaphore(false);
@@ -124,11 +125,17 @@ class ThreadController {
             while (runSimulationThreads) {
                 physicsFrameRate.acquire();
 
+                if (!runSimulationThreads) break;
                 statisticsLock.acquire();
-                root.advancePhysicsToNextFrame();              
-                statisticsLock.release();
+                try {
+                    if (!runSimulationThreads) break;
+                    root.advancePhysicsToNextFrame();
+                } finally {
+                    statisticsLock.release();
+                }
 
                 lastFrameDisplayed.acquire();
+                if (!runSimulationThreads) break;
                 root.giveFrameToViewForDisplaying();
                 frameAvailable = true;
                 frameReady.release();
@@ -148,6 +155,7 @@ class ThreadController {
             
             while (runSimulationThreads) {
                 displayFrameRate.acquire();
+                if (!runSimulationThreads) break;
 
                 boolean newFrame = frameReady.tryAcquire();
                 if (frameAvailable) {
@@ -172,20 +180,17 @@ class ThreadController {
         protected void runThrowingInterruptedException() throws InterruptedException {
             while (runSimulationThreads) {
                 Thread.sleep(STATISTICS_DISPLAY_PERIOD);
-                if (frameAvailable) {
-                    statisticsLock.acquire();
-                    SwingUtilities.invokeLater(new Runnable() {
-                        @Override
-                        public void run() {
-                            try {
-                                root.displayStatistics();
-                                statisticsLock.release();
-                            } catch (Throwable t) {
-                                // make sure we know an error occurred so we don't continue
-                                // doing bad things
-                                runSimulationThreads = false;
-                                throw new RuntimeException("Error occurred while displaying statistics", t);
-                            }
+                final long scheduledGeneration = generation;
+                if (runSimulationThreads && frameAvailable) {
+                    SwingUtilities.invokeLater(() -> {
+                        // A queued update must not reach a replacement simulation.
+                        // Never wait for physics while holding up the AWT event queue.
+                        if (!runSimulationThreads || generation != scheduledGeneration
+                                || !statisticsLock.tryAcquire()) return;
+                        try {
+                            root.displayStatistics();
+                        } finally {
+                            statisticsLock.release();
                         }
                     });
                 }
@@ -193,7 +198,8 @@ class ThreadController {
         }
     }
 
-    private void resetThreadVariables() {    
+    private void resetThreadVariables() {
+        generation++;
         statisticsLock.release();
                 
         lastFrameDisplayed.exhaust();
@@ -222,7 +228,7 @@ class ThreadController {
         statisticsDisplay.start();
     }
 
-    private boolean paused = false;
+    private volatile boolean paused = false;
     
     protected synchronized void setPaused(boolean paused) {        
         this.paused = paused;
@@ -256,26 +262,32 @@ class ThreadController {
         try {
             runSimulationThreads = false;
 
-            displayTiming.interrupt();
+            // Wake our own waits instead of interrupting JOGL's synchronous
+            // macOS/AWT dispatch. Interrupting a render can throw from JOGL and
+            // leave this thread blocked in the application's error dialog.
+            displayFrameRate.release();
+            physicsFrameRate.release();
+            lastFrameDisplayed.release();
+            statisticsDisplay.interrupt(); // Only sleeps; never renders.
+
             displayTiming.join(waitTime);
             if (displayTiming.isAlive()) {
                 throw new CouldNotStopThreadsException("Display timing thread did not stop");
             }
 
-            statisticsDisplay.interrupt();
             statisticsDisplay.join(waitTime);
             if (statisticsDisplay.isAlive()) {
                 throw new CouldNotStopThreadsException("Statistics display thread did not stop");
             }
 
-            physicsThread.interrupt();
             physicsThread.join(waitTime); 
             if (physicsThread.isAlive()) {
                 throw new CouldNotStopPhysicsException();
             }
 
         } catch (InterruptedException e) {
-            throw new CouldNotStopThreadsException("Interuption while stopping Boltzmann's threads", e);
+            Thread.currentThread().interrupt();
+            throw new CouldNotStopThreadsException("Interruption while stopping Boltzmann's threads", e);
         } 
     }    
 }

@@ -67,6 +67,7 @@ public final class RenderingSmokeTest {
                 window.dispose();
             }
         });
+        edu.byu.chem.boltzmann.controller.ThreadLifecycleSmokeTest.main(new String[] {"render"});
         System.out.println("PASS: visible particles and 3D walls, rotation, resizing, boundary modes and dimension switching");
     }
 

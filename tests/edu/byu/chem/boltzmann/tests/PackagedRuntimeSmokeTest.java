@@ -22,6 +22,7 @@ public final class PackagedRuntimeSmokeTest {
         System.out.println("Bundled runtime: " + actual);
         ModernizationSmokeTest.main(new String[0]);
         PresetSmokeTest.main(new String[0]);
+        edu.byu.chem.boltzmann.controller.ThreadLifecycleSmokeTest.main(new String[0]);
         Path application = Path.of(edu.byu.chem.boltzmann.resources.SimulationPresets.class
                 .getProtectionDomain().getCodeSource().getLocation().toURI()).getParent();
         for (var preset : edu.byu.chem.boltzmann.resources.SimulationPresets.ALL) {

@@ -144,8 +144,11 @@ public abstract class Controller {
             new Thread("Set Simulation Info") {
                 @Override
                 public void run() {
-                    setSimulationInfoWithLock(simInfo);
-                    setSimulationInfoLock.release();
+                    try {
+                        setSimulationInfoWithLock(simInfo);
+                    } finally {
+                        setSimulationInfoLock.release();
+                    }
                 }
             }.start();    
         } else {

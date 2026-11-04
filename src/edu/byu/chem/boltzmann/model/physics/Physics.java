@@ -121,9 +121,9 @@ public class Physics {
     
     private Map<Set<ParticleType>, Map<StatisticID, Statistic>> statistics;
     
-    private boolean stopProcessingCurrentFrame = false;
-    private boolean runPhysics = true;
-    private boolean processingFrame = false;
+    private volatile boolean stopProcessingCurrentFrame = false;
+    private volatile boolean runPhysics = true;
+    private volatile boolean processingFrame = false;
 
     public Physics(SimulationInfo simulationInfo, StatSettingsInfo statSettingsInfo) {
         forgetMultiplier = statSettingsInfo.forgetTime;
