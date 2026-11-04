@@ -1,0 +1,49 @@
+#Boltzmann3D V2.43
+# Sat 27 Dec 2008 02:06:41
+
+GlobalSettings {
+  paused FALSE
+  size 74.6 54.9 30
+  dimensions 3
+  hole_size 16
+  pressure_averaging_time 1000
+  boundary PERIODIC
+  color_scheme DARK
+  forget_time 4
+  lighting TRUE
+  stat_name INSTANTANEOUS_SPEED
+  stat_color BOTH
+  cumulative FALSE
+  width FALSE
+  history FALSE
+  simulation_speed 1x
+  pressure_prediction_mode IDEAL
+  3d_viewing_angles 0 0
+  coloring_mode NORMAL
+  trace_point_size 2
+  maxwell_demon_mode FALSE
+  reaction_mode FALSE
+  trace_mode FALSE
+}
+
+ParticleGroup {
+  color Red
+  radius 6
+  mass 200
+
+  RandomlyPlaced {
+    count 1
+    average_velocity 193.43
+  }
+}
+
+ParticleGroup {
+  color Blue
+  radius 0.2
+  mass 1
+
+  RandomlyPlaced {
+    count 199
+    average_velocity 2735.512
+  }
+}

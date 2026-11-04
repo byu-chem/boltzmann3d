@@ -1,0 +1,379 @@
+#Boltzmann3D V2.43
+
+GlobalSettings {
+  paused TRUE
+  size 80 60 10
+  dimensions 2
+  hole_size 8
+  pressure_averaging_time 60
+  boundary DIVIDED
+  color_scheme DARK
+  forget_time 4
+  lighting FALSE
+  stat_name INSTANTANEOUS_SPEED
+  stat_color BOTH
+  cumulative FALSE
+  width FALSE
+  history FALSE
+  simulation_speed 1x
+  pressure_prediction_mode IDEAL
+  3d_viewing_angles 0 0
+  coloring_mode NORMAL
+  trace_point_size 2
+  maxwell_demon_mode FALSE
+  reaction_mode FALSE
+  trace_mode FALSE
+}
+
+AbscissaLimits {
+
+  StatLimits {
+    name INSTANTANEOUS_SPEED
+    both_limits 0.00000 3499.2
+    red_limits 0.00000 3499.2
+    blue_limits 0.00000 3499.2
+  }
+
+  StatLimits {
+    name AVERAGE_SPEED
+    both_limits 699.83 2099.5
+    red_limits 699.83 2099.5
+    blue_limits 699.83 2099.5
+  }
+
+  StatLimits {
+    name RMS_VELOCITY
+    both_limits 0.00000 3948.4
+    red_limits 0.00000 3948.4
+    blue_limits 0.00000 3948.4
+  }
+
+  StatLimits {
+    name AVERAGE_RMS_VELOCITY
+    both_limits 789.67 2369.0
+    red_limits 789.67 2369.0
+    blue_limits 789.67 2369.0
+  }
+
+  StatLimits {
+    name KINETIC_ENERGY
+    both_limits 0.00000 6.2359
+    red_limits 0.00000 6.2359
+    blue_limits 0.00000 6.2359
+  }
+
+  StatLimits {
+    name AVERAGE_ENERGY
+    both_limits 1.2472 3.7415
+    red_limits 1.2472 3.7415
+    blue_limits 1.2472 3.7415
+  }
+
+  StatLimits {
+    name PATH
+    both_limits 0.00000 24.318
+    red_limits 0.00000 24.318
+    blue_limits 0.00000 24.318
+  }
+
+  StatLimits {
+    name AVERAGE_PATH
+    both_limits 4.8636 14.591
+    red_limits 4.8636 14.591
+    blue_limits 4.8636 14.591
+  }
+
+  StatLimits {
+    name TIME/COLLISION
+    both_limits 0.00000 17.374
+    red_limits 0.00000 17.374
+    blue_limits 0.00000 17.374
+  }
+
+  StatLimits {
+    name COLLISION_RATE
+    both_limits 7.1945E-2 0.21584
+    red_limits 7.1945E-2 0.21584
+    blue_limits 7.1945E-2 0.21584
+  }
+
+  StatLimits {
+    name RADIAL_DISTRIBUTION
+    both_limits 0.00000 30.000
+    red_limits 0.00000 30.000
+    blue_limits 0.00000 30.000
+  }
+
+  StatLimits {
+    name X_VELOCITY
+    both_limits -0.00000 0.00000
+    red_limits -2233.5 2233.5
+    blue_limits -2233.5 2233.5
+  }
+
+  StatLimits {
+    name Y_VELOCITY
+    both_limits -0.00000 0.00000
+    red_limits -2233.5 2233.5
+    blue_limits -2233.5 2233.5
+  }
+
+  StatLimits {
+    name Z_VELOCITY
+    both_limits -0.00000 0.00000
+    red_limits -2233.5 2233.5
+    blue_limits -2233.5 2233.5
+  }
+}
+
+ParticleGroup {
+  color Red
+  radius 1
+  mass 2
+
+  Particle {
+    position  33.73 6.667 0
+    angle  2.12 0
+    speed 1252.772
+  }
+
+  Particle {
+    position  8.552 41.895 0
+    angle  0.402 0
+    speed 363.8
+  }
+
+  Particle {
+    position  31.362 20.95 0
+    angle  0.652 0
+    speed 1213.802
+  }
+
+  Particle {
+    position  5.55 25.263 0
+    angle  0.749 0
+    speed 1478.839
+  }
+
+  Particle {
+    position  11.451 27.172 0
+    angle  -0.159 0
+    speed 1332.4
+  }
+
+  Particle {
+    position  4.611 55.955 0
+    angle  4.542 0
+    speed 2210.631
+  }
+
+  Particle {
+    position  18.868 37.238 0
+    angle  1.142 0
+    speed 2079.95
+  }
+
+  Particle {
+    position  1.918 30.645 0
+    angle  1.674 0
+    speed 706.086
+  }
+
+  Particle {
+    position  6.879 19.545 0
+    angle  4.112 0
+    speed 1345.795
+  }
+
+  Particle {
+    position  6.77 35.159 0
+    angle  4.094 0
+    speed 610.035
+  }
+
+  Particle {
+    position  16.853 12.67 0
+    angle  3.115 0
+    speed 1775.513
+  }
+
+  Particle {
+    position  7.267 22.973 0
+    angle  0.039 0
+    speed 1015.126
+  }
+
+  Particle {
+    position  10.64 13.589 0
+    angle  3.867 0
+    speed 3122.041
+  }
+
+  Particle {
+    position  19.185 7.324 0
+    angle  0.405 0
+    speed 2090.442
+  }
+
+  Particle {
+    position  18.565 14.967 0
+    angle  4.498 0
+    speed 826.631
+  }
+
+  Particle {
+    position  35.584 15.598 0
+    angle  -0.605 0
+    speed 195.727
+  }
+
+  Particle {
+    position  23.666 5.409 0
+    angle  -0.338 0
+    speed 2186.713
+  }
+
+  Particle {
+    position  7.391 47.599 0
+    angle  -1.388 0
+    speed 1376.618
+  }
+
+  Particle {
+    position  9.808 18.807 0
+    angle  -1.27 0
+    speed 1027.395
+  }
+
+  Particle {
+    position  11.781 16.519 0
+    angle  2.399 0
+    speed 2024.986
+  }
+}
+
+ParticleGroup {
+  color Blue
+  radius 1
+  mass 2
+
+  Particle {
+    position  74.73 6.667 0
+    angle  2.12 0
+    speed 1252.772
+  }
+
+  Particle {
+    position  49.552 41.895 0
+    angle  0.402 0
+    speed 363.8
+  }
+
+  Particle {
+    position  72.362 20.95 0
+    angle  0.652 0
+    speed 1213.802
+  }
+
+  Particle {
+    position  46.55 25.263 0
+    angle  0.749 0
+    speed 1478.839
+  }
+
+  Particle {
+    position  52.451 27.172 0
+    angle  -0.159 0
+    speed 1332.4
+  }
+
+  Particle {
+    position  45.611 55.955 0
+    angle  4.542 0
+    speed 2210.631
+  }
+
+  Particle {
+    position  59.868 37.238 0
+    angle  1.142 0
+    speed 2079.95
+  }
+
+  Particle {
+    position  42.918 30.645 0
+    angle  1.674 0
+    speed 706.086
+  }
+
+  Particle {
+    position  47.879 19.545 0
+    angle  4.112 0
+    speed 1345.795
+  }
+
+  Particle {
+    position  47.77 35.159 0
+    angle  4.094 0
+    speed 610.035
+  }
+
+  Particle {
+    position  57.853 12.67 0
+    angle  3.115 0
+    speed 1775.513
+  }
+
+  Particle {
+    position  48.267 22.973 0
+    angle  0.039 0
+    speed 1015.126
+  }
+
+  Particle {
+    position  51.64 13.589 0
+    angle  3.867 0
+    speed 3122.041
+  }
+
+  Particle {
+    position  60.185 7.324 0
+    angle  0.405 0
+    speed 2090.442
+  }
+
+  Particle {
+    position  59.565 14.967 0
+    angle  4.498 0
+    speed 826.631
+  }
+
+  Particle {
+    position  76.584 15.598 0
+    angle  -0.605 0
+    speed 195.727
+  }
+
+  Particle {
+    position  64.666 5.409 0
+    angle  -0.338 0
+    speed 2186.713
+  }
+
+  Particle {
+    position  48.391 47.599 0
+    angle  -1.388 0
+    speed 1376.618
+  }
+
+  Particle {
+    position  50.808 18.807 0
+    angle  -1.27 0
+    speed 1027.395
+  }
+
+  Particle {
+    position  52.781 16.519 0
+    angle  2.399 0
+    speed 2024.986
+  }
+}

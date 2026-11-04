@@ -21,6 +21,18 @@ public final class PackagedRuntimeSmokeTest {
         System.out.println("Bundled Java: " + Runtime.version() + " (" + System.getProperty("os.arch") + ")");
         System.out.println("Bundled runtime: " + actual);
         ModernizationSmokeTest.main(new String[0]);
+        PresetSmokeTest.main(new String[0]);
+        Path application = Path.of(edu.byu.chem.boltzmann.resources.SimulationPresets.class
+                .getProtectionDomain().getCodeSource().getLocation().toURI()).getParent();
+        for (var preset : edu.byu.chem.boltzmann.resources.SimulationPresets.ALL) {
+            Path file = application.resolve("presets").resolve(preset.filename());
+            try (var embedded = preset.source().openStream()) {
+                if (!java.util.Arrays.equals(embedded.readAllBytes(), Files.readAllBytes(file)))
+                    throw new AssertionError("Packaged preset differs from embedded resource: " + file);
+            }
+            if (new edu.byu.chem.boltzmann.model.io.Load(null).loadFile(file.toFile()) == null)
+                throw new AssertionError("Packaged preset did not load: " + file);
+        }
         System.out.println("PASS: packaged runtime, application resources and native library loading");
     }
 }

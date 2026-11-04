@@ -46,10 +46,36 @@ public class MainGuiWindow extends javax.swing.JFrame {
 
         setLocation(100, 50);
         initComponents();
+        addPresetMenu();
 
         setIconImage(ResourceLoader.getBoltzmannImage());
 
         validate();
+    }
+
+    private void addPresetMenu() {
+        javax.swing.JMenu presets = new javax.swing.JMenu("Preset simulations");
+        for (int dimension : new int[] {2, 3}) {
+            javax.swing.JMenu group = new javax.swing.JMenu(dimension + "D");
+            for (var preset : edu.byu.chem.boltzmann.resources.SimulationPresets.ALL) {
+                if (preset.dimensions() != dimension) continue;
+                javax.swing.JMenuItem item = new javax.swing.JMenuItem(preset.label());
+                item.addActionListener(event -> {
+                    try {
+                        SimulationInfo info = new Load(null).loadFile(preset.source());
+                        view.getController().applySimulationInfo(info);
+                    } catch (Exception failure) {
+                        failure.printStackTrace(System.err);
+                        javax.swing.JOptionPane.showMessageDialog(this,
+                                "Unable to load " + preset.label() + ": " + failure.getMessage(),
+                                "Preset simulation", javax.swing.JOptionPane.ERROR_MESSAGE);
+                    }
+                });
+                group.add(item);
+            }
+            presets.add(group);
+        }
+        jMenu1.insert(presets, 2);
     }
 
     public MainGuiView getView() {

@@ -75,6 +75,10 @@
             <classpath><path refid="runtime.classpath"/><pathelement location="${test.bin}"/></classpath>
             <jvmarg value="-Djava.awt.headless=true"/>
         </java>
+        <java classname="edu.byu.chem.boltzmann.tests.PresetSmokeTest" fork="true" failonerror="true" timeout="60000">
+            <classpath><path refid="runtime.classpath"/><pathelement location="${test.bin}"/></classpath>
+            <jvmarg value="-Djava.awt.headless=true"/>
+        </java>
     </target>
 
     <target name="test-render" depends="test,native-deps" description="Check rendered particle pixels (requires a display)">
@@ -116,6 +120,9 @@
             </manifest>
         </jar>
         <copy file="LICENSE" todir="${dist}"/>
+        <copy todir="${dist}/presets">
+            <fileset dir="${src}/edu/byu/chem/boltzmann/resources/simsettingsfiles/presets"/>
+        </copy>
     </target>
     <target name="dist" depends="jar" description="Build the distribution for this platform"/>
 

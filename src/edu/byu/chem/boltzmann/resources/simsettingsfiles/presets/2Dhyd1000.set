@@ -1,0 +1,144 @@
+#Boltzmann3D V2.43
+
+GlobalSettings {
+  paused FALSE
+  size 70 50 10
+  dimensions 2
+  hole_size 8
+  pressure_averaging_time 60
+  boundary REFLECTING
+  color_scheme DARK
+  forget_time 4
+  lighting TRUE
+  stat_name INSTANTANEOUS_SPEED
+  stat_color BOTH
+  cumulative FALSE
+  width FALSE
+  history FALSE
+  simulation_speed 1x
+  pressure_prediction_mode IDEAL
+  3d_viewing_angles 0 0
+  coloring_mode NORMAL
+  trace_point_size 2
+  maxwell_demon_mode FALSE
+  reaction_mode FALSE
+  trace_mode FALSE
+}
+
+AbscissaLimits {
+
+  StatLimits {
+    name INSTANTANEOUS_SPEED
+    both_limits 0.00000 6388.5
+    red_limits 0.00000 6388.5
+    blue_limits 0.00000 0.00000
+  }
+
+  StatLimits {
+    name AVERAGE_SPEED
+    both_limits 1277.7 3833.1
+    red_limits 1277.7 3833.1
+    blue_limits 0.00000 0.00000
+  }
+
+  StatLimits {
+    name RMS_VELOCITY
+    both_limits 0.00000 7208.7
+    red_limits 0.00000 7208.7
+    blue_limits 0.00000 7208.7
+  }
+
+  StatLimits {
+    name AVERAGE_RMS_VELOCITY
+    both_limits 1441.7 4325.2
+    red_limits 1441.7 4325.2
+    blue_limits 1441.7 4325.2
+  }
+
+  StatLimits {
+    name KINETIC_ENERGY
+    both_limits 0.00000 20.786
+    red_limits 0.00000 20.786
+    blue_limits 0.00000 20.786
+  }
+
+  StatLimits {
+    name AVERAGE_ENERGY
+    both_limits 4.1572 12.472
+    red_limits 4.1572 12.472
+    blue_limits 4.1572 12.472
+  }
+
+  StatLimits {
+    name PATH
+    both_limits 0.00000 42.957
+    red_limits 0.00000 42.957
+    blue_limits 0.00000 0.00000
+  }
+
+  StatLimits {
+    name AVERAGE_PATH
+    both_limits 8.5913 25.774
+    red_limits 8.5913 25.774
+    blue_limits 0.00000 0.00000
+  }
+
+  StatLimits {
+    name TIME/COLLISION
+    both_limits 0.00000 16.810
+    red_limits 0.00000 16.810
+    blue_limits 0.00000 0.00000
+  }
+
+  StatLimits {
+    name COLLISION_RATE
+    both_limits 7.4360E-2 0.22308
+    red_limits 7.4360E-2 0.22308
+    blue_limits 0.00000 0.00000
+  }
+
+  StatLimits {
+    name RADIAL_DISTRIBUTION
+    both_limits 0.00000 25.000
+    red_limits 0.00000 25.000
+    blue_limits 0.00000 25.000
+  }
+
+  StatLimits {
+    name X_VELOCITY
+    both_limits -4077.9 4077.9
+    red_limits -4077.9 4077.9
+    blue_limits -4077.9 4077.9
+  }
+
+  StatLimits {
+    name Y_VELOCITY
+    both_limits -4077.9 4077.9
+    red_limits -4077.9 4077.9
+    blue_limits -4077.9 4077.9
+  }
+
+  StatLimits {
+    name Z_VELOCITY
+    both_limits -4077.9 4077.9
+    red_limits -4077.9 4077.9
+    blue_limits -4077.9 4077.9
+  }
+}
+
+ParticleGroup {
+  color Red
+  radius 0.7
+  mass 2
+
+  RandomlyPlaced {
+    count 50
+    average_velocity 2883.483
+  }
+}
+
+ParticleGroup {
+  color Blue
+  radius 1
+  mass 2
+}

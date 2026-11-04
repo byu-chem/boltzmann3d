@@ -160,3 +160,9 @@ The Arena tab still controls dimensions, arena size and boundary conditions.
 validation and settings/physics round trips through 2D and 3D in US and German
 locales. `ant test-render` additionally checks repeated dimension transitions and
 rejects a particle that fills the 2D framebuffer.
+
+### Original preset simulations
+
+File → Preset simulations provides the 27 original `.set` files, grouped into 2D and 3D examples. These were recovered unchanged from the original Boltzmann.app distribution (V2.43–V2.48 settings). The current startup default remains separate; “Original default” opens the older saved example.
+
+Presets are embedded in the application JAR and also shipped as ordinary files in `presets/` beside the JAR (on macOS, inside `Boltzmann3D.app/Contents/app/`). Use File → Load to open an edited copy.
