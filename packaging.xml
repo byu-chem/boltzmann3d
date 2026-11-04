@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="Boltzmann3D packaging">
+    <property name="app.name" value="Boltzmann3D"/>
+    <property name="app.version" value="3.0.0"/>
+    <property name="app.vendor" value="BYU Chemistry"/>
+    <property name="app.description" value="A kinetic theory demonstrator"/>
+    <property name="package.root" location="packages"/>
+    <property name="package.images" location="${package.root}/images"/>
+    <property name="package.installers" location="${package.root}/installers"/>
+
+    <target name="package-jdk">
+        <condition property="package.jdk.valid"><equals arg1="${ant.java.version}" arg2="${java.release}"/></condition>
+        <fail unless="package.jdk.valid"
+              message="Packaging must run under JDK ${java.release}; Ant is using Java ${ant.java.version}. Set JAVA_HOME to the JDK ${java.release} installation."/>
+    </target>
+
+    <target name="package-init" depends="package-jdk,dist">
+        <condition property="package.mac"><os family="mac"/></condition>
+        <condition property="package.windows"><os family="windows"/></condition>
+        <condition property="package.exe.suffix" value=".exe"><os family="windows"/></condition>
+        <property name="package.exe.suffix" value=""/>
+        <property name="jpackage.bin" location="${java.home}/bin/jpackage${package.exe.suffix}"/>
+        <available file="${jpackage.bin}" property="jpackage.available"/>
+        <fail unless="jpackage.available" message="Packaging requires a full JDK 25 with jpackage. Check JAVA_HOME."/>
+
+        <condition property="package.image" value="${package.images}/${app.name}.app"><isset property="package.mac"/></condition>
+        <property name="package.image" location="${package.images}/${app.name}"/>
+        <condition property="package.app" value="${package.image}/Contents/app"><isset property="package.mac"/></condition>
+        <property name="package.app" location="${package.image}/app"/>
+        <condition property="package.runtime" value="${package.image}/Contents/runtime/Contents/Home"><isset property="package.mac"/></condition>
+        <property name="package.runtime" location="${package.image}/runtime"/>
+        <mkdir dir="${package.images}"/>
+        <mkdir dir="${package.installers}"/>
+        <!-- This directory is generated output, rebuilt to avoid stale runtimes. -->
+        <delete dir="${package.image}"/>
+    </target>
+
+    <macrodef name="build-app-image">
+        <element name="platform-args" implicit="true"/>
+        <sequential>
+            <exec executable="${jpackage.bin}" failonerror="true">
+                <arg value="--type"/><arg value="app-image"/>
+                <arg value="--name"/><arg value="${app.name}"/>
+                <arg value="--app-version"/><arg value="${app.version}"/>
+                <arg value="--vendor"/><arg value="${app.vendor}"/>
+                <arg value="--description"/><arg value="${app.description}"/>
+                <arg value="--copyright"/><arg value="Copyright (C) 2013 Dr. Randall B. Shirts"/>
+                <arg value="--input"/><arg file="${dist}"/>
+                <arg value="--main-jar"/><arg value="Boltzmann3D.jar"/>
+                <arg value="--main-class"/><arg value="${main.class}"/>
+                <arg value="--dest"/><arg file="${package.images}"/>
+                <!-- Keep bin/java so the exact shipped runtime can be verified. -->
+                <arg value="--jlink-options"/><arg value="--strip-debug --no-man-pages --no-header-files"/>
+                <arg value="--java-options"/><arg value="--enable-native-access=ALL-UNNAMED"/>
+                <arg value="--java-options"/><arg value="--add-exports=java.desktop/sun.awt=ALL-UNNAMED"/>
+                <arg value="--java-options"/><arg value="--add-exports=java.desktop/sun.java2d=ALL-UNNAMED"/>
+                <platform-args/>
+            </exec>
+        </sequential>
+    </macrodef>
+
+    <target name="package-image-mac" depends="package-init" if="package.mac">
+        <build-app-image>
+            <arg value="--icon"/><arg file="packaging/boltzmann3d.icns"/>
+            <arg value="--mac-package-identifier"/><arg value="edu.byu.chem.boltzmann3d"/>
+            <arg value="--mac-package-name"/><arg value="Boltzmann3D"/>
+            <arg value="--mac-app-category"/><arg value="public.app-category.education"/>
+        </build-app-image>
+    </target>
+
+    <target name="package-image-windows" depends="package-init" if="package.windows">
+        <build-app-image>
+            <arg value="--icon"/><arg file="src/edu/byu/chem/boltzmann/resources/images/boltzicon.ico"/>
+        </build-app-image>
+    </target>
+
+    <target name="package-image" depends="package-image-mac,package-image-windows"
+            description="Build a native app with its own Java runtime"/>
+
+    <target name="test-packaged" depends="package-image,test"
+            description="Verify settings, physics and JNI using the bundled runtime">
+        <pathconvert property="package.test.classpath">
+            <path>
+                <pathelement location="${package.app}/Boltzmann3D.jar"/>
+                <fileset dir="${package.app}/lib" includes="*.jar"/>
+                <pathelement location="${test.bin}"/>
+            </path>
+        </pathconvert>
+        <loadfile property="package.launcher.config" srcfile="${package.app}/${app.name}.cfg"/>
+        <condition property="package.launcher.valid">
+            <and>
+                <contains string="${package.launcher.config}" substring="${main.class}"/>
+                <contains string="${package.launcher.config}" substring="--enable-native-access=ALL-UNNAMED"/>
+                <contains string="${package.launcher.config}" substring="--add-exports=java.desktop/sun.awt=ALL-UNNAMED"/>
+                <contains string="${package.launcher.config}" substring="--add-exports=java.desktop/sun.java2d=ALL-UNNAMED"/>
+            </and>
+        </condition>
+        <fail unless="package.launcher.valid" message="Packaged launcher is missing its main class or JOGL JVM options."/>
+        <exec executable="${package.runtime}/bin/java${package.exe.suffix}" failonerror="true" timeout="60000">
+            <arg value="-Djava.awt.headless=true"/>
+            <arg value="--enable-native-access=ALL-UNNAMED"/>
+            <arg value="-ea"/>
+            <arg value="-cp"/><arg value="${package.test.classpath}"/>
+            <arg value="edu.byu.chem.boltzmann.tests.PackagedRuntimeSmokeTest"/>
+            <arg file="${package.runtime}"/>
+            <arg value="${java.release}"/>
+        </exec>
+    </target>
+
+    <target name="test-packaged-render" depends="test-packaged"
+            description="Check graphics using the bundled runtime (requires a display)">
+        <exec executable="${package.runtime}/bin/java${package.exe.suffix}" failonerror="true" timeout="60000">
+            <arg value="-Dboltzmann.opengl.debug=true"/>
+            <arg value="--enable-native-access=ALL-UNNAMED"/>
+            <arg value="--add-exports=java.desktop/sun.awt=ALL-UNNAMED"/>
+            <arg value="--add-exports=java.desktop/sun.java2d=ALL-UNNAMED"/>
+            <arg value="-ea"/>
+            <arg value="-cp"/><arg value="${package.test.classpath}"/>
+            <arg value="edu.byu.chem.boltzmann.tests.RenderingSmokeTest"/>
+        </exec>
+    </target>
+
+    <target name="package-installer-mac" depends="test-packaged" if="package.mac">
+        <delete file="${package.installers}/${app.name}-${app.version}.dmg"/>
+        <exec executable="${jpackage.bin}" failonerror="true">
+            <arg value="--type"/><arg value="dmg"/>
+            <arg value="--name"/><arg value="${app.name}"/>
+            <arg value="--app-version"/><arg value="${app.version}"/>
+            <arg value="--app-image"/><arg file="${package.image}"/>
+            <arg value="--dest"/><arg file="${package.installers}"/>
+            <arg value="--vendor"/><arg value="${app.vendor}"/>
+        </exec>
+    </target>
+
+    <target name="package-installer-windows" depends="test-packaged" if="package.windows">
+        <delete file="${package.installers}/${app.name}-${app.version}.exe"/>
+        <exec executable="${jpackage.bin}" failonerror="true">
+            <arg value="--type"/><arg value="exe"/>
+            <arg value="--name"/><arg value="${app.name}"/>
+            <arg value="--app-version"/><arg value="${app.version}"/>
+            <arg value="--app-image"/><arg file="${package.image}"/>
+            <arg value="--dest"/><arg file="${package.installers}"/>
+            <arg value="--vendor"/><arg value="${app.vendor}"/>
+            <arg value="--description"/><arg value="${app.description}"/>
+            <arg value="--license-file"/><arg file="LICENSE"/>
+            <arg value="--win-per-user-install"/>
+            <arg value="--win-menu"/>
+            <arg value="--win-shortcut"/>
+            <arg value="--win-dir-chooser"/>
+            <arg value="--win-upgrade-uuid"/><arg value="50934769-f29d-5f57-82dc-dc8d12e14464"/>
+        </exec>
+    </target>
+
+    <target name="package" depends="package-installer-mac,package-installer-windows"
+            description="Build and verify an app plus DMG or EXE installer"/>
+    <target name="package-verified" depends="test-packaged-render,package"
+            description="Also verify packaged graphics before creating the installer"/>
+    <target name="clean-packages" description="Remove generated app images and installers">
+        <delete dir="${package.root}"/>
+    </target>
+</project>

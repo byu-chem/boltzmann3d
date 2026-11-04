@@ -89,21 +89,56 @@ On both targets, manually check:
 
 ## Application packaging
 
-After `ant dist`, use the selected JDK's jpackage to make an application image
-on the target operating system. For example, on macOS:
+Packages include their own Java 25 runtime, JOGL libraries and matching natives.
+Users do not need Java, Ant or Homebrew installed. The initial package version
+is 3.0.0; override it with `-Dapp.version=3.0.1` for a subsequent package.
+
+On Apple Silicon, select the ARM64 JDK explicitly (Homebrew's Ant may otherwise
+choose its own newer JDK), then build:
 
 ```sh
-jpackage --type app-image --name Boltzmann3D \
-  --input dist --main-jar Boltzmann3D.jar \
-  --dest packages \
-  --java-options="--enable-native-access=ALL-UNNAMED" \
-  --java-options="--add-exports=java.desktop/sun.awt=ALL-UNNAMED" \
-  --java-options="--add-exports=java.desktop/sun.java2d=ALL-UNNAMED"
+export JAVA_HOME=$(/usr/libexec/java_home -v 25 -a arm64)
+export PATH="$JAVA_HOME/bin:$PATH"
+ant package
 ```
 
-This bundles Java with the app. A macOS image must be built with an ARM64 JDK;
-a Windows image must be built on Windows with an x64 JDK. Installer creation,
-macOS signing/notarization and interactive platform validation are follow-up
-work; this initial build produces runnable JAR distributions.
+Outputs:
+
+- `packages/images/Boltzmann3D.app` — the standalone Mac app.
+- `packages/installers/Boltzmann3D-3.0.0.dmg` — open it and drag the app to Applications.
+
+`ant package` needs normal desktop access for macOS disk-image tooling.
+`ant package-image` builds just the app; `ant test-packaged` checks the shipped
+runtime, resources, native library loading, settings and physics.
+`ant package-verified` additionally checks actual particles and arena walls
+using the bundled runtime before building the installer. Run this from a
+normal graphical desktop terminal.
+
+On Windows x64, set JAVA_HOME to a JDK 25 installation and put Ant and WiX 5
+on PATH. One way to install WiX with the .NET SDK is:
+
+```powershell
+dotnet tool install --global wix --version 5.0.2
+wix extension add --global WixToolset.UI.wixext/5.0.2
+ant package
+```
+
+Outputs:
+
+- `packages/images/Boltzmann3D/` — a portable app directory with Boltzmann3D.exe.
+- `packages/installers/Boltzmann3D-3.0.0.exe` — a per-user installer with a Start
+  menu entry, desktop shortcut and uninstall support.
+
+Packages must be built on their target operating system. GitHub Actions builds
+both installers and uploads them as `Boltzmann3D-macos-arm64-installer` and
+`Boltzmann3D-windows-x64-installer` artifacts. It verifies each bundled runtime
+and checks packaged Mac graphics. Installer archives preserve the permissions
+needed by the Mac app; use the DMG artifact instead of downloading an app folder
+as a generic ZIP. `ant clean-packages` removes generated package output.
+
+These initial builds do not have publisher certificates or Apple notarization.
+The Mac application uses the local signing performed by jpackage, rather than
+a Developer ID signature. Signing/notarization for public distribution is a
+separate release step.
 
 Original contact: Derek Manwaring, manwaringsandals@gmail.com.
