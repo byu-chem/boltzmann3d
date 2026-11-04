@@ -72,7 +72,8 @@ Windows 10 or interactive graphics.
 
 With a graphical desktop and working OpenGL driver, run `ant test-render` for
 the graphics regression check. It briefly opens a test window, reads particle
-pixels from the framebuffer in 1D/2D/3D, and checks 3D rotation, resizing and
+pixels from the framebuffer in 1D/2D/3D, counts 3D wall pixels independently,
+and checks 3D rotation, resizing and
 periodic/divided/hole/piston boundaries, then switching back to 2D. The 3D
 renderer converts physical lengths to nanometers before sending them to OpenGL;
 the projection matrix contains only the camera frustum. Run this from a normal desktop terminal; the headless

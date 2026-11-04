@@ -659,8 +659,11 @@ public class GLPanel extends JPanel {
 	        for(int j=0;j<cuts;j++)
 	        {
 	            double x=x1+(sx1*i)+(sx2*j), y=y1+(sy1*i)+(sy2*j), z=z1+(sz1*i)+(sz2*j);
+                    // Two triangles preserve the inward winding of each wall cell.
                     vertex(x,y,z);
                     vertex(x+sx1,y+sy1,z+sz1);
+                    vertex(x+sx1+sx2,y+sy1+sy2,z+sz1+sz2);
+                    vertex(x,y,z);
                     vertex(x+sx1+sx2,y+sy1+sy2,z+sz1+sz2);
                     vertex(x+sx2,y+sy2,z+sz2);
 	        }
@@ -733,11 +736,15 @@ public class GLPanel extends JPanel {
 
                 //Redraw the walls.
                 if(!inTraceMode) {
-                    //Draw the walls further back to avoid z-fighting.
-                          gl.glDepthRange(0.01, 1.0);
+                    // Use one depth range for the whole scene. The old range split
+                    // placed walls near the clear depth and depended on driver precision.
+                    gl.glPushAttrib(GL_POLYGON_BIT | GL_ENABLE_BIT);
+                    gl.glDisable(GL_POLYGON_SMOOTH);
+                    gl.glEnable(GL_POLYGON_OFFSET_FILL);
+                    gl.glPolygonOffset(1.0f, 1.0f);
 
                     //Box
-                    gl.glBegin(GL_QUADS);
+                    gl.glBegin(GL_TRIANGLES);
                     //Left Side
                     colorComponents = left3DColor.getComponents(null);
                     gl.glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
@@ -770,8 +777,7 @@ public class GLPanel extends JPanel {
                     drawPlane(w,0,0,0,0,0,0,0,d,w,0,d,10);
                     gl.glEnd();
 
-                    //Draw everything else closer up to avoid z-fighting.
-                          gl.glDepthRange(0.0, 0.99);
+                    gl.glPopAttrib();
                 }
 	
 			//Draw the piston.
@@ -801,7 +807,7 @@ public class GLPanel extends JPanel {
                         //translate(halfWidth, halfHeight, halfDepth);
                         //gl.glScaled(SimulationInfo.ARENA_DIVIDER_RADIUS * 2.0, h, d);
                         //glutSolidCube(1.0f);
-                        gl.glBegin(GL_QUADS);
+                        gl.glBegin(GL_TRIANGLES);
                         drawPlane(halfWidth+dr,0,d,halfWidth+dr,h,d,halfWidth-dr,h,d,halfWidth-dr,0,d,10);
                         drawPlane(halfWidth-dr,0,0,halfWidth-dr,h,0,halfWidth+dr,h,0,halfWidth+dr,0,0,10);
                         drawPlane(halfWidth+dr,h,0,halfWidth-dr,h,0,halfWidth-dr,h,d,halfWidth+dr,h,d,10);
@@ -825,7 +831,7 @@ public class GLPanel extends JPanel {
 
                     //Draw the small sides of the divider.
                     double dr=SimulationInfo.ARENA_DIVIDER_RADIUS;
-                    gl.glBegin(GL_QUADS);
+                    gl.glBegin(GL_TRIANGLES);
                     drawPlane(halfWidth+dr,0,d,halfWidth+dr,h,d,halfWidth-dr,h,d,halfWidth-dr,0,d,10);
                     drawPlane(halfWidth-dr,0,0,halfWidth-dr,h,0,halfWidth+dr,h,0,halfWidth+dr,0,0,10);
                     drawPlane(halfWidth+dr,h,0,halfWidth-dr,h,0,halfWidth-dr,h,d,halfWidth+dr,h,d,10);
@@ -1131,6 +1137,7 @@ public class GLPanel extends JPanel {
 	public void reshapeThis(int x, int y, int width, int height) {
 		//Change the viewport.
                 gl.glViewport(0, 0, width, height);
+                gl.glDepthRange(0.0, 1.0);
                 gl.glMatrixMode(GL_PROJECTION);
                 gl.glLoadIdentity();
 
@@ -1154,7 +1161,13 @@ public class GLPanel extends JPanel {
                     // Build the frustum directly instead of multiplying a projection by 1e8.
                     double extent = Math.sqrt(xSize * xSize + ySize * ySize
                             + Math.pow(renderLength(simulationInfo.arenaZSize), 2));
-                    double near = Math.max(0.001, extent * 0.0001);
+                    // Bound every rotated arena corner by a sphere around its center.
+                    // A useful near distance preserves wall depth precision while
+                    // staying in front of every corner for all camera rotations.
+                    double centerDistance = renderLength(camz - simulationInfo.arenaZSize / 2.0);
+                    double nearestCornerBound = centerDistance - extent / 2.0;
+                    double near = Math.max(0.001, nearestCornerBound > 0
+                            ? nearestCornerBound * 0.5 : extent * 0.0001);
                     double far = renderLength(camz) + extent;
                     double top = near * Math.tan(Math.toRadians(viewingAngle / 2.0));
                     double right = top * width / height;

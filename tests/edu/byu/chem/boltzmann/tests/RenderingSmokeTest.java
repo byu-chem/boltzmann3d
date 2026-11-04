@@ -67,7 +67,7 @@ public final class RenderingSmokeTest {
                 window.dispose();
             }
         });
-        System.out.println("PASS: visible particle pixels in 1D/2D/3D, rotation, resizing, boundary modes and dimension switching");
+        System.out.println("PASS: visible particles and 3D walls, rotation, resizing, boundary modes and dimension switching");
     }
 
     private static SimulationInfo settings(int dimension) throws Exception {
@@ -131,6 +131,7 @@ public final class RenderingSmokeTest {
             checkError(gl, label + " reading pixels");
             int redPixels = 0;
             int coloredPixels = 0;
+            int wallPixels = 0;
             for (int offset = 0; offset < pixels.capacity(); offset += 4) {
                 int red = Byte.toUnsignedInt(pixels.get(offset));
                 int green = Byte.toUnsignedInt(pixels.get(offset + 1));
@@ -140,6 +141,11 @@ public final class RenderingSmokeTest {
                 }
                 if (red > 40 && red > green * 1.5 && red > blue * 1.5) {
                     redPixels++;
+                }
+                // The fixture uses a red sphere, gold/tan arena walls, and gray/white
+                // piston/divider surfaces. Count wall colors independently of particles.
+                if (green > 20 && red > green && green > blue && red < green * 1.5) {
+                    wallPixels++;
                 }
             }
             if (redPixels < 20) {
@@ -154,7 +160,16 @@ public final class RenderingSmokeTest {
                 System.err.println(label + " nonblack pixels: " + coloredPixels);
                 throw new AssertionError(label + ": particle is invisible (" + redPixels + " red pixels)");
             }
-            System.out.println(label + ": " + redPixels + " particle pixels");
+            if (label.startsWith("3D") && wallPixels < 100) {
+                double[] depthRange = new double[2];
+                int[] depthBits = new int[1];
+                gl.glGetDoublev(GL2.GL_DEPTH_RANGE, depthRange, 0);
+                gl.glGetIntegerv(GL2.GL_DEPTH_BITS, depthBits, 0);
+                System.err.println(label + " depth range: " + Arrays.toString(depthRange)
+                        + ", depth bits: " + depthBits[0]);
+                throw new AssertionError(label + ": arena walls are invisible (" + wallPixels + " wall pixels)");
+            }
+            System.out.println(label + ": " + redPixels + " particle pixels, " + wallPixels + " wall pixels");
             return true;
         });
         if (!invoked) {
