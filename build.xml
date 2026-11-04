@@ -76,6 +76,7 @@
     <target name="test-render" depends="test,native-deps" description="Check rendered particle pixels (requires a display)">
         <java classname="edu.byu.chem.boltzmann.tests.RenderingSmokeTest" fork="true" failonerror="true" timeout="60000">
             <classpath><path refid="runtime.classpath"/><pathelement location="${test.bin}"/></classpath>
+            <jvmarg value="-Dboltzmann.opengl.debug=true"/>
             <jvmarg value="--enable-native-access=ALL-UNNAMED"/>
             <jvmarg value="--add-exports=java.desktop/sun.awt=ALL-UNNAMED"/>
             <jvmarg value="--add-exports=java.desktop/sun.java2d=ALL-UNNAMED"/>

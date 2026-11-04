@@ -39,6 +39,10 @@ jobs:
       - name: Build and check settings and physics
         shell: bash
         run: ant -noinput clean test dist 2>&1 | tee build.log
+      - name: Check macOS rendering pixels
+        if: runner.os == 'macOS'
+        shell: bash
+        run: ant -noinput test-render 2>&1 | tee -a build.log
       - name: Attach compiler diagnostics to the commit checks
         if: failure()
         uses: actions/github-script@v7

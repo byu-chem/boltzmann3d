@@ -20,6 +20,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Map;
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
@@ -101,12 +102,14 @@ public final class RenderingSmokeTest {
             int width = drawable.getSurfaceWidth();
             int height = drawable.getSurfaceHeight();
             ByteBuffer pixels = Buffers.newDirectByteBuffer(width * height * 4);
-            gl.glReadBuffer(GL2.GL_BACK);
+            checkError(gl, label + " rendering before readback");
+            // macOS may render GLCanvas through an FBO, whose color attachment
+            // must be selected instead of the window-system GL_BACK buffer.
+            int readBuffer = drawable.getContext().getDefaultReadBuffer();
+            gl.glReadBuffer(readBuffer);
+            checkError(gl, label + " selecting read buffer 0x" + Integer.toHexString(readBuffer));
             gl.glReadPixels(0, 0, width, height, GL2.GL_RGBA, GL2.GL_UNSIGNED_BYTE, pixels);
-            int error = gl.glGetError();
-            if (error != GL2.GL_NO_ERROR) {
-                throw new AssertionError(label + ": OpenGL error 0x" + Integer.toHexString(error));
-            }
+            checkError(gl, label + " reading pixels");
             int redPixels = 0;
             for (int offset = 0; offset < pixels.capacity(); offset += 4) {
                 int red = Byte.toUnsignedInt(pixels.get(offset));
@@ -117,6 +120,14 @@ public final class RenderingSmokeTest {
                 }
             }
             if (redPixels < 20) {
+                double[] modelview = new double[16];
+                double[] projection = new double[16];
+                gl.glGetDoublev(GL2.GL_MODELVIEW_MATRIX, modelview, 0);
+                gl.glGetDoublev(GL2.GL_PROJECTION_MATRIX, projection, 0);
+                System.err.println(label + " modelview: " + Arrays.toString(modelview));
+                System.err.println(label + " projection: " + Arrays.toString(projection));
+                System.err.println(label + " read framebuffer: " + drawable.getContext().getDefaultReadFramebuffer()
+                        + ", read buffer: 0x" + Integer.toHexString(readBuffer));
                 throw new AssertionError(label + ": particle is invisible (" + redPixels + " red pixels)");
             }
             System.out.println(label + ": " + redPixels + " particle pixels");
@@ -124,6 +135,13 @@ public final class RenderingSmokeTest {
         });
         if (!invoked) {
             throw new AssertionError(label + ": OpenGL canvas is not realized");
+        }
+    }
+
+    private static void checkError(GL2 gl, String stage) {
+        int error = gl.glGetError();
+        if (error != GL2.GL_NO_ERROR) {
+            throw new AssertionError(stage + ": OpenGL error 0x" + Integer.toHexString(error));
         }
     }
 }

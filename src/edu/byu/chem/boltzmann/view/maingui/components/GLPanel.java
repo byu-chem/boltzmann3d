@@ -35,6 +35,7 @@ import java.util.Map;
 import javax.swing.*;
 import javax.swing.border.BevelBorder;
 import com.jogamp.common.nio.Buffers;
+import com.jogamp.opengl.DebugGL2;
 import com.jogamp.opengl.GL2;
 import com.jogamp.opengl.GLAutoDrawable;
 import com.jogamp.opengl.GLCapabilities;
@@ -212,6 +213,9 @@ public class GLPanel extends JPanel {
                 canvas.addGLEventListener(new GLEventListener() {
                     @Override
                     public void init(GLAutoDrawable drawable) {
+                        if (Boolean.getBoolean("boltzmann.opengl.debug")) {
+                            drawable.setGL(new DebugGL2(drawable.getGL().getGL2()));
+                        }
                         gl = drawable.getGL().getGL2();
                         GLPanel.this.init();
                         initialized = true;
