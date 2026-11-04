@@ -539,13 +539,13 @@ public class Formulas {
      * Calculates the natural log of the gamma of x 
      */
     private static double lnGamma(double x) {
-        Double d=new Double(x);
+        Double d=Double.valueOf(x);
         if(gammaMap.containsKey(d)) {
             return ((Double)gammaMap.get(d)).doubleValue();
         }
         
         if(x>25) {
-            Double val = new Double((x - 0.5) * Math.log(x) - x +
+            Double val = Double.valueOf((x - 0.5) * Math.log(x) - x +
                     0.5*  Math.log(2 * Math.PI) + 
                     1 / (12 * x) - 
                     1 / (360 * Math.pow(x, 3)) + 
@@ -553,7 +553,7 @@ public class Formulas {
             gammaMap.put(d, val);
             return val.doubleValue();
         } else {
-            Double val=new Double(Math.log(gamma(x)));
+            Double val=Double.valueOf(Math.log(gamma(x)));
             gammaMap.put(d, val);
             return val.doubleValue();
         }
@@ -622,3 +622,4 @@ public class Formulas {
         return objectPairs;
     }
 }
+

@@ -1,0 +1,6 @@
+/bin/
+/build/
+/dist/
+/packages/
+.DS_Store
+hs_err_pid*.log

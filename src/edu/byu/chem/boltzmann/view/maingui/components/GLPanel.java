@@ -34,15 +34,16 @@ import java.util.HashMap;
 import java.util.Map;
 import javax.swing.*;
 import javax.swing.border.BevelBorder;
-import org.lwjgl.BufferUtils;
-import org.lwjgl.LWJGLException;
-import org.lwjgl.opengl.AWTGLCanvas;
-import org.lwjgl.opengl.Display;
-import static org.lwjgl.opengl.GL11.*;
-import org.lwjgl.util.glu.Cylinder;
-import org.lwjgl.util.glu.Disk;
-import org.lwjgl.util.glu.GLU;
-import org.lwjgl.util.glu.Sphere;
+import com.jogamp.common.nio.Buffers;
+import com.jogamp.opengl.GL2;
+import com.jogamp.opengl.GLAutoDrawable;
+import com.jogamp.opengl.GLCapabilities;
+import com.jogamp.opengl.GLEventListener;
+import com.jogamp.opengl.GLProfile;
+import com.jogamp.opengl.awt.GLCanvas;
+import com.jogamp.opengl.glu.GLU;
+import com.jogamp.opengl.glu.GLUquadric;
+import static com.jogamp.opengl.GL2.*;
 
 /**
  * Responsible for displaying the current state of the particles.  The 2D and 3D
@@ -72,7 +73,11 @@ public class GLPanel extends JPanel {
 	public static double drawPistonOverrideValue = 0.0;
 	
 	//The drawing surface.
-	public AWTGLCanvas canvas;
+	public final GLCanvas canvas;
+
+        // Set only inside JOGL callbacks while the canvas context is current.
+        private GL2 gl;
+        private final GLU glu = new GLU();
         
         //whether initGL() has initialized the display
         public boolean initialized;
@@ -81,9 +86,9 @@ public class GLPanel extends JPanel {
 	private final static int CUBE = 1;
 	
 	//OpenGL shape definitions.
-	private Sphere sphere;
-        private Cylinder cylinder;
-        private Disk disk;
+	private GLUquadric sphere;
+        private GLUquadric cylinder;
+        private GLUquadric disk;
 	
 	//Loosely follows main.traceMode; used in an unusual way to clear the screen...
 	public boolean inTraceMode=false;
@@ -107,10 +112,10 @@ public class GLPanel extends JPanel {
 	/** Point size, effective in trace mode.  Follows main.tracePointSize. */
 	private int curPointSize = -1;
         
-	private boolean isRotatingLeft = false;
-	private boolean isRotatingRight = false;
-	private boolean isRotatingUp = false;
-	private boolean isRotatingDown = false;
+	private volatile boolean isRotatingLeft = false;
+	private volatile boolean isRotatingRight = false;
+	private volatile boolean isRotatingUp = false;
+	private volatile boolean isRotatingDown = false;
         
         private double camz = 250;
 
@@ -127,15 +132,15 @@ public class GLPanel extends JPanel {
         private int camAngleX=0, camAngleY=0;
         private boolean lighting = true;
 
-        private FrameInfo currentFrame;
+        private volatile FrameInfo currentFrame;
 	
         private DoubleBuffer doubleBuffer;
         private FloatBuffer floatBuffer;
         
         private FloatBuffer toBuffer(float[] array){//perform myBuffer.flip() before using
-            return BufferUtils.createFloatBuffer(array.length).put(array);}
+            return Buffers.newDirectFloatBuffer(array.length).put(array);}
         private DoubleBuffer toBuffer(double[] array){//perform myBuffer.flip() before using
-            return BufferUtils.createDoubleBuffer(array.length).put(array);}
+            return Buffers.newDirectDoubleBuffer(array.length).put(array);}
         
 	/** 
 	 * Returns the # of stacks & slices that should be used to draw
@@ -147,7 +152,7 @@ public class GLPanel extends JPanel {
 	public Point getPrecision (double radius)
 	{
                 radius = Units.convert("m", "nm", radius);
-		Double f = new Double((radius * 10.0));
+		Double f = Double.valueOf(radius * 10.0);
 		if (precMap.containsKey(f))
 			return (Point)precMap.get(f);
 		else
@@ -198,39 +203,60 @@ public class GLPanel extends JPanel {
                 front3DColor = gold;
                 back3DColor = gold;
                 
-                try {
-                    canvas = new AWTGLCanvas() {
-                        @Override
-                        public void paintGL() {
-                            reshapeThis(0, 0, canvas.getWidth(), canvas.getHeight());
-                            display();
-                            try {
-                                canvas.swapBuffers();
-                            } catch (LWJGLException ex) {
-                                throw new RuntimeException("Could not display OpenGL canvas", ex);
-                            }
+                // GL2 preserves the existing fixed-function renderer during migration.
+                // Request it explicitly: a core profile cannot render these primitives.
+                GLCapabilities capabilities = new GLCapabilities(GLProfile.get(GLProfile.GL2));
+                capabilities.setDoubleBuffered(true);
+                capabilities.setDepthBits(24);
+                canvas = new GLCanvas(capabilities);
+                canvas.addGLEventListener(new GLEventListener() {
+                    @Override
+                    public void init(GLAutoDrawable drawable) {
+                        gl = drawable.getGL().getGL2();
+                        GLPanel.this.init();
+                        initialized = true;
+                    }
+
+                    @Override
+                    public void display(GLAutoDrawable drawable) {
+                        gl = drawable.getGL().getGL2();
+                        if (drawable.getSurfaceWidth() <= 0 || drawable.getSurfaceHeight() <= 0) {
+                            return;
                         }
-                        
-                        @Override
-                        public void initGL() {
-                            init();
+                        if (currentFrame == null) {
+                            gl.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                            return;
                         }
-                        
-                    };
-                    
-                    canvas.addMouseListener(new MouseAdapter() {
-                        @Override
-                        public void mouseReleased(MouseEvent e) {
-                            if (simulationInfo.maxwellDemonMode) {
-                                arenaHoleOpen = !arenaHoleOpen;
-                                mainView.getController().setArenaHoleOpen(arenaHoleOpen);
-                            }
-                        }                    
-                    });
-                } catch (LWJGLException e) {
-                    throw new RuntimeException("Could not create OpenGL canvas", e);
-                }
-                
+                        // Surface dimensions include Retina scaling; Swing sizes do not.
+                        reshapeThis(0, 0, drawable.getSurfaceWidth(), drawable.getSurfaceHeight());
+                        GLPanel.this.display();
+                        // GLCanvas swaps buffers automatically after this callback.
+                    }
+
+                    @Override
+                    public void reshape(GLAutoDrawable drawable, int x, int y, int width, int height) {
+                        // Projection also depends on simulation settings, so refresh per frame.
+                    }
+
+                    @Override
+                    public void dispose(GLAutoDrawable drawable) {
+                        gl = drawable.getGL().getGL2();
+                        deleteQuadrics();
+                        gl.glDeleteLists(CUBE, 1);
+                        initialized = false;
+                        gl = null;
+                    }
+                });
+                canvas.addMouseListener(new MouseAdapter() {
+                    @Override
+                    public void mouseReleased(MouseEvent e) {
+                        if (simulationInfo.maxwellDemonMode) {
+                            arenaHoleOpen = !arenaHoleOpen;
+                            mainView.getController().setArenaHoleOpen(arenaHoleOpen);
+                        }
+                    }
+                });
+
                 initialized=false;
                 
                 add(canvas, BorderLayout.CENTER);
@@ -295,134 +321,137 @@ public class GLPanel extends JPanel {
 
         /** Initializes the canvas by setting the viewport, lighting, etc. */
         public void init() {
-            glShadeModel(GL_SMOOTH);
-            glMatrixMode(GL_MODELVIEW);
-            glLoadIdentity();
-            sphere=new Sphere();
-            cylinder=new Cylinder();
-            disk=new Disk();
+            gl.glShadeModel(GL_SMOOTH);
+            gl.glMatrixMode(GL_MODELVIEW);
+            gl.glLoadIdentity();
+            sphere = glu.gluNewQuadric();
+            cylinder = glu.gluNewQuadric();
+            disk = glu.gluNewQuadric();
+            glu.gluQuadricNormals(sphere, GLU.GLU_SMOOTH);
+            glu.gluQuadricNormals(cylinder, GLU.GLU_SMOOTH);
+            glu.gluQuadricNormals(disk, GLU.GLU_SMOOTH);
             
             //GL_LIGHT0 is a very dim backlight; with it I can only see silhouetted spheres against oblique walls.
             //GL_LIGHT0 is enabled only in 3D mode.
             floatBuffer = toBuffer(new float[] {0.3f, 0.3f, 0.3f, 1.0f});
             floatBuffer.flip();
-            //glLight(GL_LIGHT0, GL_AMBIENT_AND_DIFFUSE, floatBuffer); // RGBA values
-            glLight(GL_LIGHT0, GL_AMBIENT, floatBuffer); // RGBA values
-            glLight(GL_LIGHT0, GL_DIFFUSE, floatBuffer); // RGBA values
+            //gl.glLightfv(GL_LIGHT0, GL_AMBIENT_AND_DIFFUSE, floatBuffer); // RGBA values
+            gl.glLightfv(GL_LIGHT0, GL_AMBIENT, floatBuffer); // RGBA values
+            gl.glLightfv(GL_LIGHT0, GL_DIFFUSE, floatBuffer); // RGBA values
             floatBuffer = toBuffer(new float[] {0.6f, 0.6f, 0.6f, 0.3f});
             floatBuffer.flip();
-            glLight(GL_LIGHT0, GL_SPECULAR, floatBuffer);
+            gl.glLightfv(GL_LIGHT0, GL_SPECULAR, floatBuffer);
             floatBuffer = toBuffer(new float[] {0.0f, 0.0f, -1.0f, 0.0f});
             floatBuffer.flip();
-            glLight(GL_LIGHT0, GL_POSITION, floatBuffer); // position (directional if last coord is 0)
+            gl.glLightfv(GL_LIGHT0, GL_POSITION, floatBuffer); // position (directional if last coord is 0)
 
             //GL_LIGHT1 is enabled only in 3D mode, and its position is set elsewhere
             floatBuffer = toBuffer(new float[] {0.3f, 0.3f, 0.3f, 1.0f});
             floatBuffer.flip();
-            glLight(GL_LIGHT1, GL_AMBIENT, floatBuffer); // very dim gray walls; spheres invisible
+            gl.glLightfv(GL_LIGHT1, GL_AMBIENT, floatBuffer); // very dim gray walls; spheres invisible
             floatBuffer = toBuffer(new float[] {0.8f, 0.8f, 0.8f, 1.0f});
             floatBuffer.flip();
-            glLight(GL_LIGHT1, GL_DIFFUSE, floatBuffer); // this is most of what we see
+            gl.glLightfv(GL_LIGHT1, GL_DIFFUSE, floatBuffer); // this is most of what we see
             floatBuffer = toBuffer(new float[] {1.0f, 1.0f, 1.0f, 1.0f});
             floatBuffer.flip();
-            glLight(GL_LIGHT1, GL_SPECULAR, floatBuffer); // no noticeable contribution - it looks black!
+            gl.glLightfv(GL_LIGHT1, GL_SPECULAR, floatBuffer); // no noticeable contribution - it looks black!
 
             floatBuffer = toBuffer(new float[] {0.0f, 0.0f, -1.0f, 1.0f});
             floatBuffer.flip();
-            glLight(GL_LIGHT1, GL_SPOT_DIRECTION, floatBuffer);
-            glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, 180);
-            glLightf(GL_LIGHT1, GL_LINEAR_ATTENUATION, 0.5E-5f);
-            glLightf(GL_LIGHT1, GL_SPOT_EXPONENT, 64);
+            gl.glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, floatBuffer);
+            gl.glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, 180);
+            gl.glLightf(GL_LIGHT1, GL_LINEAR_ATTENUATION, 0.5E-5f);
+            gl.glLightf(GL_LIGHT1, GL_SPOT_EXPONENT, 64);
 
             //GL_LIGHT2 is only enabled in 1D and 2D modes.
             floatBuffer = toBuffer(new float[] {0.1f, 0.1f, 0.1f, 1.0f});
             floatBuffer.flip();
-            glLight(GL_LIGHT2, GL_AMBIENT, floatBuffer);
+            gl.glLightfv(GL_LIGHT2, GL_AMBIENT, floatBuffer);
             floatBuffer = toBuffer(new float[] {1.0f, 1.0f, 1.0f, 1.0f});
             floatBuffer.flip();
-            glLight(GL_LIGHT2, GL_DIFFUSE, floatBuffer);
+            gl.glLightfv(GL_LIGHT2, GL_DIFFUSE, floatBuffer);
             floatBuffer = toBuffer(new float[] {0.0f, 0.0f, 0.0f, 1.0f});
             floatBuffer.flip();
-            glLight(GL_LIGHT2, GL_SPECULAR, floatBuffer);
+            gl.glLightfv(GL_LIGHT2, GL_SPECULAR, floatBuffer);
             floatBuffer = toBuffer(new float[] {0.0f, 0.0f, 1.0f, 0.0f});
             floatBuffer.flip();
-            glLight(GL_LIGHT2, GL_POSITION, floatBuffer);
+            gl.glLightfv(GL_LIGHT2, GL_POSITION, floatBuffer);
 
-            glEnable(GL_LIGHTING);
-            glColorMaterial(GL_FRONT, GL_DIFFUSE);
-            glEnable(GL_COLOR_MATERIAL);
-            glEnable(GL_DEPTH_TEST);
-            glEnable(GL_NORMALIZE);
-            glCullFace(GL_BACK);
-            glEnable(GL_CULL_FACE);
-            glEnable(GL_POLYGON_SMOOTH);
-            glEnable(GL_LINE_SMOOTH);
-            glEnable(GL_POINT_SMOOTH);
-            glEnable(GL_BLEND);
-            glEnable(GL_DITHER);
-            glPointSize(tracePointSize);
+            gl.glEnable(GL_LIGHTING);
+            gl.glColorMaterial(GL_FRONT, GL_DIFFUSE);
+            gl.glEnable(GL_COLOR_MATERIAL);
+            gl.glEnable(GL_DEPTH_TEST);
+            gl.glEnable(GL_NORMALIZE);
+            gl.glCullFace(GL_BACK);
+            gl.glEnable(GL_CULL_FACE);
+            gl.glEnable(GL_POLYGON_SMOOTH);
+            gl.glEnable(GL_LINE_SMOOTH);
+            gl.glEnable(GL_POINT_SMOOTH);
+            gl.glEnable(GL_BLEND);
+            gl.glEnable(GL_DITHER);
+            gl.glPointSize(tracePointSize);
             curPointSize=tracePointSize;
 
             //Print valuable OpenGL driver info to the console for debugging.
-            System.out.println(glGetString(GL_VENDOR));
-            System.out.println(glGetString(GL_RENDERER));
-            System.out.println(glGetString(GL_VERSION));
+            System.out.println(gl.glGetString(GL_VENDOR));
+            System.out.println(gl.glGetString(GL_RENDERER));
+            System.out.println(gl.glGetString(GL_VERSION));
             makeCube();
 	}
 
 	public void makeCube()
 	{
-		glNewList(GLPanel.CUBE, GL_COMPILE);
+                gl.glNewList(GLPanel.CUBE, GL_COMPILE);
                 colorComponents = left3DColor.getComponents(null);
-		glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
+                gl.glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
 
 		//Draw the sides of the cube
-		glBegin(GL_QUADS);				//Start Drawing Quads
+                gl.glBegin(GL_QUADS);				//Start Drawing Quads
 		
 		//Front Face
-		glNormal3f( 0.0f, 0.0f, 1.0f);		//Normal Facing Forward
-		glVertex3f(-0.5f, -0.5f,  0.5f);	//Bottom Left Of The Texture and Quad
-		glVertex3f( 0.5f, -0.5f,  0.5f);	//Bottom Right Of The Texture and Quad
-		glVertex3f( 0.5f,  0.5f,  0.5f);	//Top Right Of The Texture and Quad
-		glVertex3f(-0.5f,  0.5f,  0.5f);	//Top Left Of The Texture and Quad
+                gl.glNormal3f( 0.0f, 0.0f, 1.0f);		//Normal Facing Forward
+                gl.glVertex3f(-0.5f, -0.5f,  0.5f);	//Bottom Left Of The Texture and Quad
+                gl.glVertex3f( 0.5f, -0.5f,  0.5f);	//Bottom Right Of The Texture and Quad
+                gl.glVertex3f( 0.5f,  0.5f,  0.5f);	//Top Right Of The Texture and Quad
+                gl.glVertex3f(-0.5f,  0.5f,  0.5f);	//Top Left Of The Texture and Quad
 		
 		//Back Face
-		glNormal3f( 0.0f, 0.0f,-1.0f);		//Normal Facing Away
-		glVertex3f(-0.5f, -0.5f, -0.5f);	//Bottom Right Of The Texture and Quad
-		glVertex3f(-0.5f,  0.5f, -0.5f);	//Top Right Of The Texture and Quad
-		glVertex3f( 0.5f,  0.5f, -0.5f);	//Top Left Of The Texture and Quad
-		glVertex3f( 0.5f, -0.5f, -0.5f);	//Bottom Left Of The Texture and Quad
+                gl.glNormal3f( 0.0f, 0.0f,-1.0f);		//Normal Facing Away
+                gl.glVertex3f(-0.5f, -0.5f, -0.5f);	//Bottom Right Of The Texture and Quad
+                gl.glVertex3f(-0.5f,  0.5f, -0.5f);	//Top Right Of The Texture and Quad
+                gl.glVertex3f( 0.5f,  0.5f, -0.5f);	//Top Left Of The Texture and Quad
+                gl.glVertex3f( 0.5f, -0.5f, -0.5f);	//Bottom Left Of The Texture and Quad
 		
 		//Top Face
-		glNormal3f( 0.0f, 1.0f, 0.0f);		//Normal Facing Up
-		glVertex3f(-0.5f,  0.5f, -0.5f);	//Top Left Of The Texture and Quad
-		glVertex3f(-0.5f,  0.5f,  0.5f);	//Bottom Left Of The Texture and Quad
-		glVertex3f( 0.5f,  0.5f,  0.5f);	//Bottom Right Of The Texture and Quad
-		glVertex3f( 0.5f,  0.5f, -0.5f);	//Top Right Of The Texture and Quad
+                gl.glNormal3f( 0.0f, 1.0f, 0.0f);		//Normal Facing Up
+                gl.glVertex3f(-0.5f,  0.5f, -0.5f);	//Top Left Of The Texture and Quad
+                gl.glVertex3f(-0.5f,  0.5f,  0.5f);	//Bottom Left Of The Texture and Quad
+                gl.glVertex3f( 0.5f,  0.5f,  0.5f);	//Bottom Right Of The Texture and Quad
+                gl.glVertex3f( 0.5f,  0.5f, -0.5f);	//Top Right Of The Texture and Quad
 		
 		//Bottom Face
-		glNormal3f( 0.0f,-1.0f, 0.0f);		//Normal Facing Down
-		glVertex3f(-0.5f, -0.5f, -0.5f);	//Top Right Of The Texture and Quad
-		glVertex3f( 0.5f, -0.5f, -0.5f);	//Top Left Of The Texture and Quad
-		glVertex3f( 0.5f, -0.5f,  0.5f);	//Bottom Left Of The Texture and Quad
-		glVertex3f(-0.5f, -0.5f,  0.5f);	//Bottom Right Of The Texture and Quad
+                gl.glNormal3f( 0.0f,-1.0f, 0.0f);		//Normal Facing Down
+                gl.glVertex3f(-0.5f, -0.5f, -0.5f);	//Top Right Of The Texture and Quad
+                gl.glVertex3f( 0.5f, -0.5f, -0.5f);	//Top Left Of The Texture and Quad
+                gl.glVertex3f( 0.5f, -0.5f,  0.5f);	//Bottom Left Of The Texture and Quad
+                gl.glVertex3f(-0.5f, -0.5f,  0.5f);	//Bottom Right Of The Texture and Quad
 		
 		//Right face
-		glNormal3f( 1.0f, 0.0f, 0.0f);		//Normal Facing Right
-		glVertex3f( 0.5f, -0.5f, -0.5f);	//Bottom Right Of The Texture and Quad
-		glVertex3f( 0.5f,  0.5f, -0.5f);	//Top Right Of The Texture and Quad
-		glVertex3f( 0.5f,  0.5f,  0.5f);	//Top Left Of The Texture and Quad
-		glVertex3f( 0.5f, -0.5f,  0.5f);	//Bottom Left Of The Texture and Quad
+                gl.glNormal3f( 1.0f, 0.0f, 0.0f);		//Normal Facing Right
+                gl.glVertex3f( 0.5f, -0.5f, -0.5f);	//Bottom Right Of The Texture and Quad
+                gl.glVertex3f( 0.5f,  0.5f, -0.5f);	//Top Right Of The Texture and Quad
+                gl.glVertex3f( 0.5f,  0.5f,  0.5f);	//Top Left Of The Texture and Quad
+                gl.glVertex3f( 0.5f, -0.5f,  0.5f);	//Bottom Left Of The Texture and Quad
 		
 		//Left Face
-		glNormal3f(-1.0f, 0.0f, 0.0f);		//Normal Facing Left
-		glVertex3f(-0.5f, -0.5f, -0.5f);	//Bottom Left Of The Texture and Quad
-		glVertex3f(-0.5f, -0.5f,  0.5f);	//Bottom Right Of The Texture and Quad
-		glVertex3f(-0.5f,  0.5f,  0.5f);	//Top Right Of The Texture and Quad
-		glVertex3f(-0.5f,  0.5f, -0.5f);	//Top Left Of The Texture and Quad
+                gl.glNormal3f(-1.0f, 0.0f, 0.0f);		//Normal Facing Left
+                gl.glVertex3f(-0.5f, -0.5f, -0.5f);	//Bottom Left Of The Texture and Quad
+                gl.glVertex3f(-0.5f, -0.5f,  0.5f);	//Bottom Right Of The Texture and Quad
+                gl.glVertex3f(-0.5f,  0.5f,  0.5f);	//Top Right Of The Texture and Quad
+                gl.glVertex3f(-0.5f,  0.5f, -0.5f);	//Top Left Of The Texture and Quad
 			
-		glEnd();	
-		glEndList();
+                gl.glEnd();
+                gl.glEndList();
 	}
 	
 	/**
@@ -437,26 +466,26 @@ public class GLPanel extends JPanel {
 	private void drawSphere (double x, double y, double z, double rad, Point prec)
 	{		
 		if (traceMode) {
-                    glDisable(GL_LIGHTING);
-                    glBegin(GL_POINTS);
-                    glVertex3d(x,y,z);
-                    glEnd();
-                    glEnable(GL_LIGHTING);
+                    gl.glDisable(GL_LIGHTING);
+                    gl.glBegin(GL_POINTS);
+                    gl.glVertex3d(x,y,z);
+                    gl.glEnd();
+                    gl.glEnable(GL_LIGHTING);
 		} else {
 
-                    glPushMatrix();
-                        glTranslated(x, y, z);
-                        sphere.draw((float)rad, prec.x, prec.y);
+                    gl.glPushMatrix();
+                        gl.glTranslated(x, y, z);
+                        glu.gluSphere(sphere, (float)rad, prec.x, prec.y);
 
                         //Draw an inside-out sphere in 3D periodic mode so you can
                         //see inside the spheres that cross the wall boundary.
                         if(simulationInfo.dimension == 3 && (simulationInfo.arenaType == ArenaType.PERIODIC_BOUNDARIES))
                         {
-                                sphere.setOrientation(GLU.GLU_INSIDE);
-                                sphere.draw((float)rad, prec.x, prec.y);
-                                sphere.setOrientation(GLU.GLU_OUTSIDE);
+                                glu.gluQuadricOrientation(sphere, GLU.GLU_INSIDE);
+                                glu.gluSphere(sphere, (float)rad, prec.x, prec.y);
+                                glu.gluQuadricOrientation(sphere, GLU.GLU_OUTSIDE);
                         }
-                    glPopMatrix();
+                    gl.glPopMatrix();
 		}
 	}
 	
@@ -467,7 +496,7 @@ public class GLPanel extends JPanel {
 		double w = simulationInfo.arenaXSize, h = simulationInfo.arenaYSize, d = simulationInfo.arenaZSize;
 		//double w2 = w / 2;
                 if (simulationInfo.dimension == 1) {
-                    glTranslated(0.0, canvas.getHeight() / 2.0 * (simulationInfo.arenaXSize / canvas.getWidth()), 0.0);
+                    gl.glTranslated(0.0, canvas.getHeight() / 2.0 * (simulationInfo.arenaXSize / canvas.getWidth()), 0.0);
                 }
 		
 		if (currentFrame != null) {
@@ -486,7 +515,7 @@ public class GLPanel extends JPanel {
                                 particleColor = colorer.getParticleColor(particleState);
                             }
                             colorComponents = particleColor.getComponents(null);
-                            glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
+                            gl.glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
                             Point prec = getPrecision (particleState.rad);
 
                             drawSphere (particleState.x, particleState.y, particleState.z, particle.radius, prec);
@@ -527,23 +556,23 @@ public class GLPanel extends JPanel {
             double w2 = w / 2.0, d2 = d / 2.0; //, h2 = h / 2.0
             double pistonPos = currentFrame.getPistonPosition(currentFrame.endTime);//currentFrame.pistonPos;
             colorComponents = pistonColor.getComponents(null);
-            glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
+            gl.glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
             switch (simulationInfo.dimension) {
                 case 1:
                     double relW = w;
                     double relH = canvas.getHeight() * (simulationInfo.arenaXSize / canvas.getWidth());
 
-                    glPushMatrix();
+                    gl.glPushMatrix();
                         glTranslated (pistonPos + SimulationInfo.PISTON_VALVE_RADIUS, relH, 0);
                         glRotatef (90,1.0f,0.0f, 0.0f);
-                        cylinder.draw((float)SimulationInfo.PISTON_VALVE_RADIUS, (float)SimulationInfo.PISTON_VALVE_RADIUS, (float)relH, prec.x, 1);
-                    glPopMatrix();
+                        glu.gluCylinder(cylinder, (float)SimulationInfo.PISTON_VALVE_RADIUS, (float)SimulationInfo.PISTON_VALVE_RADIUS, (float)relH, prec.x, 1);
+                    gl.glPopMatrix();
 
-                    glPushMatrix();
-                        glTranslated(pistonPos + 2.0 * SimulationInfo.PISTON_VALVE_RADIUS , relH / 2.0, 0.0);
-                        glRotatef(90, 0.0f,1.0f, 0.0f);
-                        cylinder.draw((float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)(relW - pistonPos), prec.y, 1);
-                    glPopMatrix();
+                    gl.glPushMatrix();
+                        gl.glTranslated(pistonPos + 2.0 * SimulationInfo.PISTON_VALVE_RADIUS , relH / 2.0, 0.0);
+                        gl.glRotatef(90, 0.0f,1.0f, 0.0f);
+                        glu.gluCylinder(cylinder, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)(relW - pistonPos), prec.y, 1);
+                    gl.glPopMatrix();
                     break;
 
                 case 2:
@@ -551,34 +580,34 @@ public class GLPanel extends JPanel {
                     relH = h;
 
                     // draw the piston valve
-                    glPushMatrix();
-                        glTranslated(0, pistonPos + SimulationInfo.PISTON_VALVE_RADIUS, 0);
-                        glRotatef(90, 0.0f, 1.0f, 0.0f);
-                        cylinder.draw((float)SimulationInfo.PISTON_VALVE_RADIUS, (float)SimulationInfo.PISTON_VALVE_RADIUS, (float)relW, prec.y, 1);
-                    glPopMatrix();
+                    gl.glPushMatrix();
+                        gl.glTranslated(0, pistonPos + SimulationInfo.PISTON_VALVE_RADIUS, 0);
+                        gl.glRotatef(90, 0.0f, 1.0f, 0.0f);
+                        glu.gluCylinder(cylinder, (float)SimulationInfo.PISTON_VALVE_RADIUS, (float)SimulationInfo.PISTON_VALVE_RADIUS, (float)relW, prec.y, 1);
+                    gl.glPopMatrix();
 
                     // draw the piston shaft
-                    glPushMatrix();
-                        glTranslated(relW / 2.0, relH, 0);
-                        glRotatef(90, 1.0f, 0.0f, 0.0f);
-                        cylinder.draw((float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)(relH - pistonPos - 2.0*SimulationInfo.PISTON_VALVE_RADIUS), prec.x, 1);
-                    glPopMatrix();
+                    gl.glPushMatrix();
+                        gl.glTranslated(relW / 2.0, relH, 0);
+                        gl.glRotatef(90, 1.0f, 0.0f, 0.0f);
+                        glu.gluCylinder(cylinder, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)(relH - pistonPos - 2.0*SimulationInfo.PISTON_VALVE_RADIUS), prec.x, 1);
+                    gl.glPopMatrix();
                     break;
 
                 case 3:
-                    glPushMatrix();
-                        glTranslated(w2,pistonPos+SimulationInfo.PISTON_VALVE_RADIUS,d2);
-                        glScaled(w,2.0*SimulationInfo.PISTON_VALVE_RADIUS, d);
+                    gl.glPushMatrix();
+                        gl.glTranslated(w2,pistonPos+SimulationInfo.PISTON_VALVE_RADIUS,d2);
+                        gl.glScaled(w,2.0*SimulationInfo.PISTON_VALVE_RADIUS, d);
                         colorComponents = left3DColor.getComponents(null);
-                        glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
+                        gl.glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
                         glutSolidCube(1.0f);
-                    glPopMatrix();
+                    gl.glPopMatrix();
 
-                    glPushMatrix();
-                        glTranslated(w2, pistonPos + SimulationInfo.PISTON_VALVE_RADIUS , d2);
-                        glRotatef(-90, 1.0f, 0.0f, 0.0f);
-                        cylinder.draw((float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)(h - pistonPos + SimulationInfo.PISTON_VALVE_RADIUS), prec.x, 1);
-                    glPopMatrix();
+                    gl.glPushMatrix();
+                        gl.glTranslated(w2, pistonPos + SimulationInfo.PISTON_VALVE_RADIUS , d2);
+                        gl.glRotatef(-90, 1.0f, 0.0f, 0.0f);
+                        glu.gluCylinder(cylinder, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)(h - pistonPos + SimulationInfo.PISTON_VALVE_RADIUS), prec.x, 1);
+                    gl.glPopMatrix();
             }
         }
     }
@@ -596,10 +625,10 @@ public class GLPanel extends JPanel {
 	        for(int j=0;j<cuts;j++)
 	        {
 	            double x=x1+(sx1*i)+(sx2*j), y=y1+(sy1*i)+(sy2*j), z=z1+(sz1*i)+(sz2*j);
-	            glVertex3d(x,y,z);
-	            glVertex3d(x+sx1,y+sy1,z+sz1);
-	            glVertex3d(x+sx1+sx2,y+sy1+sy2,z+sz1+sz2);
-	            glVertex3d(x+sx2,y+sy2,z+sz2);
+                    gl.glVertex3d(x,y,z);
+                    gl.glVertex3d(x+sx1,y+sy1,z+sz1);
+                    gl.glVertex3d(x+sx1+sx2,y+sy1+sy2,z+sz1+sz2);
+                    gl.glVertex3d(x+sx2,y+sy2,z+sz2);
 	        }
 	    }
 	}
@@ -615,12 +644,12 @@ public class GLPanel extends JPanel {
             {
                 //Clear the screen.
                 if (inTraceMode)
-                    glClear(GL_DEPTH_BUFFER_BIT);
+                    gl.glClear(GL_DEPTH_BUFFER_BIT);
                 else
-                    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                    gl.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-                glMatrixMode(GL_MODELVIEW);
-                glLoadIdentity();
+                gl.glMatrixMode(GL_MODELVIEW);
+                gl.glLoadIdentity();
                 double w = simulationInfo.arenaXSize;
                 double h = simulationInfo.arenaYSize;
                 double d = simulationInfo.arenaZSize; // (already in simulation units!)
@@ -631,96 +660,96 @@ public class GLPanel extends JPanel {
                 //Set the light position.
                 floatBuffer = toBuffer(new float[] { 0.0f, 0.0f, (float)(-camz + d), 1});
                 floatBuffer.flip();
-                glLight(GL_LIGHT1, GL_POSITION, floatBuffer);
+                gl.glLightfv(GL_LIGHT1, GL_POSITION, floatBuffer);
 
                 //Set the camera position.
-                GLU.gluLookAt((float)halfWidth, (float)halfHeight, (float)camz, (float)halfWidth, (float)halfHeight, 0F, 0F, 1F, 0F);
+                glu.gluLookAt((float)halfWidth, (float)halfHeight, (float)camz, (float)halfWidth, (float)halfHeight, 0F, 0F, 1F, 0F);
 
                 //Rotate the world to make it look like the camera moved.
-                glTranslated(halfWidth,halfHeight,halfDepth);
-                glRotated(camAngleY,0,1, 0);
+                gl.glTranslated(halfWidth,halfHeight,halfDepth);
+                gl.glRotated(camAngleY,0,1, 0);
                 double angle=camAngleY*Math.PI/180.0;
-                glRotated(camAngleX,Math.cos(angle),0, Math.sin(angle));
-                glTranslated(-halfWidth,-halfHeight,-halfDepth);
+                gl.glRotated(camAngleX,Math.cos(angle),0, Math.sin(angle));
+                gl.glTranslated(-halfWidth,-halfHeight,-halfDepth);
 
                 //Set the clipping planes (applies to periodic boundaries).
                 doubleBuffer = toBuffer(new double[]{1,0,0,clipDistance});
                 doubleBuffer.flip();
-                glClipPlane(GL_CLIP_PLANE0, doubleBuffer);
+                gl.glClipPlane(GL_CLIP_PLANE0, doubleBuffer);
                 doubleBuffer = toBuffer(new double[]{0,1,0,clipDistance});
                 doubleBuffer.flip();
-                glClipPlane(GL_CLIP_PLANE2, doubleBuffer);
+                gl.glClipPlane(GL_CLIP_PLANE2, doubleBuffer);
                 doubleBuffer = toBuffer(new double[]{0,0,1,clipDistance});
                 doubleBuffer.flip();
-                glClipPlane(GL_CLIP_PLANE4, doubleBuffer);
-                glRotatef(180,0,1,0);
+                gl.glClipPlane(GL_CLIP_PLANE4, doubleBuffer);
+                gl.glRotatef(180,0,1,0);
                 doubleBuffer = toBuffer(new double[]{1,0,0,w+clipDistance});
                 doubleBuffer.flip();
-                glClipPlane(GL_CLIP_PLANE1, doubleBuffer);
+                gl.glClipPlane(GL_CLIP_PLANE1, doubleBuffer);
                 doubleBuffer = toBuffer(new double[]{0,0,1,d+clipDistance});
                 doubleBuffer.flip();
-                glClipPlane(GL_CLIP_PLANE5, doubleBuffer);
-                glRotatef(-180,0,1,0);
-                glRotatef(180,1,0,0);
+                gl.glClipPlane(GL_CLIP_PLANE5, doubleBuffer);
+                gl.glRotatef(-180,0,1,0);
+                gl.glRotatef(180,1,0,0);
                 doubleBuffer = toBuffer(new double[]{0,1,0,h+clipDistance});
                 doubleBuffer.flip();
-                glClipPlane(GL_CLIP_PLANE3, doubleBuffer);
-                glRotatef(-180,1,0,0);
+                gl.glClipPlane(GL_CLIP_PLANE3, doubleBuffer);
+                gl.glRotatef(-180,1,0,0);
 
                 //Disable the clipping planes until the walls are drawn.
-                glDisable(GL_CLIP_PLANE0);
-                glDisable(GL_CLIP_PLANE1);
-                glDisable(GL_CLIP_PLANE2);
-                glDisable(GL_CLIP_PLANE3);
-                glDisable(GL_CLIP_PLANE4);
-                glDisable(GL_CLIP_PLANE5);
+                gl.glDisable(GL_CLIP_PLANE0);
+                gl.glDisable(GL_CLIP_PLANE1);
+                gl.glDisable(GL_CLIP_PLANE2);
+                gl.glDisable(GL_CLIP_PLANE3);
+                gl.glDisable(GL_CLIP_PLANE4);
+                gl.glDisable(GL_CLIP_PLANE5);
 
                 //Use a disk to draw the walls.
-                disk = new Disk();
+                glu.gluQuadricOrientation(disk, GLU.GLU_OUTSIDE);
                 Point prec = getPrecision(simulationInfo.holeDiameter/2);
                 double outerRadius = Math.sqrt(Math.pow(halfWidth,2)+Math.pow(halfDepth,2));
 
                 //Redraw the walls.
                 if(!inTraceMode) {
                     //Draw the walls further back to avoid z-fighting.
-                          glDepthRange(0.01, 1.0);
+                          gl.glDepthRange(0.01, 1.0);
 
                     //Box
-                    glBegin(GL_QUADS);
+                    gl.glBegin(GL_QUADS);
                     //Left Side
                     colorComponents = left3DColor.getComponents(null);
-                    glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
-                    glNormal3f(1.0f, 0.0f, 0.0f);
+                    gl.glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
+                    gl.glNormal3f(1.0f, 0.0f, 0.0f);
                     drawPlane(0,0,0,0,h,0,0,h,d,0,0,d,10);
                     //Right Side
                     colorComponents = right3DColor.getComponents(null);
-                    glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
-                    glNormal3f(-1.0f, 0.0f, 0.0f);
+                    gl.glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
+                    gl.glNormal3f(-1.0f, 0.0f, 0.0f);
                     drawPlane(w,0,d,w,h,d,w,h,0,w,0,0,10);
                     //Front Side
                     colorComponents = front3DColor.getComponents(null);
-                    glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
-                    glNormal3f(0.0f, 0.0f, -1.0f);
+                    gl.glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
+                    gl.glNormal3f(0.0f, 0.0f, -1.0f);
                     drawPlane(0,0,d,0,h,d,w,h,d,w,0,d,10);
                     //Back Side
                     colorComponents = back3DColor.getComponents(null);
-                    glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
-                    glNormal3f(0.0f, 0.0f, 1.0f);
+                    gl.glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
+                    gl.glNormal3f(0.0f, 0.0f, 1.0f);
                     drawPlane(w,0,0,w,h,0,0,h,0,0,0,0,10);
                     //Top Side
                     colorComponents = top3DColor.getComponents(null);
-                    glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
-                    glNormal3f(0.0f, -1.0f, 0.0f);
+                    gl.glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
+                    gl.glNormal3f(0.0f, -1.0f, 0.0f);
                     drawPlane(w,h,d,0,h,d,0,h,0,w,h,0,10);
                     //Bottom Side
                     colorComponents = bottom3DColor.getComponents(null);
-                    glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
-                    glNormal3f(0.0f, 1.0f, 0.0f);
+                    gl.glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
+                    gl.glNormal3f(0.0f, 1.0f, 0.0f);
                     drawPlane(w,0,0,0,0,0,0,0,d,w,0,d,10);
-                    glEnd();
+                    gl.glEnd();
 
                     //Draw everything else closer up to avoid z-fighting.
-                          glDepthRange(0.0, 0.99);
+                          gl.glDepthRange(0.0, 0.99);
                 }
 	
 			//Draw the piston.
@@ -729,72 +758,72 @@ public class GLPanel extends JPanel {
                 }
         	
 //        	//Re-enable the clipping planes before spheres are added.
-        	glEnable(GL_CLIP_PLANE0);
-                glEnable(GL_CLIP_PLANE1);
-                glEnable(GL_CLIP_PLANE2);
-                glEnable(GL_CLIP_PLANE3);
-                glEnable(GL_CLIP_PLANE4);
-                glEnable(GL_CLIP_PLANE5);
+                gl.glEnable(GL_CLIP_PLANE0);
+                gl.glEnable(GL_CLIP_PLANE1);
+                gl.glEnable(GL_CLIP_PLANE2);
+                gl.glEnable(GL_CLIP_PLANE3);
+                gl.glEnable(GL_CLIP_PLANE4);
+                gl.glEnable(GL_CLIP_PLANE5);
 			
 			//Draw the divider.
                 colorComponents = divColor.getComponents(null);
-                glColor4f(colorComponents[0], colorComponents[1], colorComponents[2], colorComponents[3]);
+                gl.glColor4f(colorComponents[0], colorComponents[1], colorComponents[2], colorComponents[3]);
 
     		if (simulationInfo.arenaType == ArenaType.DIVIDED_ARENA || 
                         (simulationInfo.maxwellDemonMode && !currentFrame.isArenaHoleOpen())) {
     			//Save matrix state.
-        		glPushMatrix();
+                        gl.glPushMatrix();
                         double dr=SimulationInfo.ARENA_DIVIDER_RADIUS;
         		
         		//Divider (cube)
-    			//glTranslated(halfWidth, halfHeight, halfDepth);
-    			//glScaled(SimulationInfo.ARENA_DIVIDER_RADIUS * 2.0, h, d);
+                        //gl.glTranslated(halfWidth, halfHeight, halfDepth);
+                        //gl.glScaled(SimulationInfo.ARENA_DIVIDER_RADIUS * 2.0, h, d);
                         //glutSolidCube(1.0f);
-                        glBegin(GL_QUADS);
+                        gl.glBegin(GL_QUADS);
                         drawPlane(halfWidth+dr,0,d,halfWidth+dr,h,d,halfWidth-dr,h,d,halfWidth-dr,0,d,10);
                         drawPlane(halfWidth-dr,0,0,halfWidth-dr,h,0,halfWidth+dr,h,0,halfWidth+dr,0,0,10);
                         drawPlane(halfWidth+dr,h,0,halfWidth-dr,h,0,halfWidth-dr,h,d,halfWidth+dr,h,d,10);
                         drawPlane(halfWidth+dr,0,d,halfWidth-dr,0,d,halfWidth-dr,0,0,halfWidth+dr,0,0,10);
-                        glEnd();
-                        glTranslated(halfWidth+SimulationInfo.ARENA_DIVIDER_RADIUS,halfHeight,halfDepth);
-                        glRotatef(90,0,1,0);
-                                disk=new Disk();
-                        disk.draw(0.0f, (float)outerRadius, prec.x*2, prec.y);
+                        gl.glEnd();
+                        gl.glTranslated(halfWidth+SimulationInfo.ARENA_DIVIDER_RADIUS,halfHeight,halfDepth);
+                        gl.glRotatef(90,0,1,0);
+                                glu.gluQuadricOrientation(disk, GLU.GLU_OUTSIDE);
+                        glu.gluDisk(disk, 0.0f, (float)outerRadius, prec.x*2, prec.y);
                                 //Left Wall (with hole)
-                        glTranslated(0,0,-2*SimulationInfo.ARENA_DIVIDER_RADIUS);
-                                disk=new Disk();
-                                disk.setOrientation(GLU.GLU_INSIDE);
-                        disk.draw(0.0f, (float)outerRadius, prec.x*2, prec.y);
+                        gl.glTranslated(0,0,-2*SimulationInfo.ARENA_DIVIDER_RADIUS);
+                                glu.gluQuadricOrientation(disk, GLU.GLU_OUTSIDE);
+                                glu.gluQuadricOrientation(disk, GLU.GLU_INSIDE);
+                        glu.gluDisk(disk, 0.0f, (float)outerRadius, prec.x*2, prec.y);
         		
     			//Restore matrix state.
-        		glPopMatrix();
+                        gl.glPopMatrix();
 	        } else if (simulationInfo.arenaType == ArenaType.DIVIDED_ARENA_WITH_HOLE) {
                     //Save matrix state.
-                    glPushMatrix();
+                    gl.glPushMatrix();
 
                     //Draw the small sides of the divider.
                     double dr=SimulationInfo.ARENA_DIVIDER_RADIUS;
-                    glBegin(GL_QUADS);
+                    gl.glBegin(GL_QUADS);
                     drawPlane(halfWidth+dr,0,d,halfWidth+dr,h,d,halfWidth-dr,h,d,halfWidth-dr,0,d,10);
                     drawPlane(halfWidth-dr,0,0,halfWidth-dr,h,0,halfWidth+dr,h,0,halfWidth+dr,0,0,10);
                     drawPlane(halfWidth+dr,h,0,halfWidth-dr,h,0,halfWidth-dr,h,d,halfWidth+dr,h,d,10);
                     drawPlane(halfWidth+dr,0,d,halfWidth-dr,0,d,halfWidth-dr,0,0,halfWidth+dr,0,0,10);
-                    glEnd();
+                    gl.glEnd();
 
                     //Right Wall (with hole)
-                    glTranslated(halfWidth+SimulationInfo.ARENA_DIVIDER_RADIUS,halfHeight,halfDepth);
-                    glRotatef(90,0,1,0);
-                            disk=new Disk();
-                    disk.draw((float)(simulationInfo.holeDiameter/2.0), (float)outerRadius, prec.x*2, prec.y);
+                    gl.glTranslated(halfWidth+SimulationInfo.ARENA_DIVIDER_RADIUS,halfHeight,halfDepth);
+                    gl.glRotatef(90,0,1,0);
+                            glu.gluQuadricOrientation(disk, GLU.GLU_OUTSIDE);
+                    glu.gluDisk(disk, (float)(simulationInfo.holeDiameter/2.0), (float)outerRadius, prec.x*2, prec.y);
 
                             //Left Wall (with hole)
-                    glTranslated(0,0,-2*SimulationInfo.ARENA_DIVIDER_RADIUS);
-                            disk=new Disk();
-                            disk.setOrientation(GLU.GLU_INSIDE);
-                    disk.draw((float)(simulationInfo.holeDiameter/2.0), (float)outerRadius, prec.x*2, prec.y);
+                    gl.glTranslated(0,0,-2*SimulationInfo.ARENA_DIVIDER_RADIUS);
+                            glu.gluQuadricOrientation(disk, GLU.GLU_OUTSIDE);
+                            glu.gluQuadricOrientation(disk, GLU.GLU_INSIDE);
+                    glu.gluDisk(disk, (float)(simulationInfo.holeDiameter/2.0), (float)outerRadius, prec.x*2, prec.y);
 
                         //Ring in Middle
-                    glTranslated(0,0,SimulationInfo.ARENA_DIVIDER_RADIUS);
+                    gl.glTranslated(0,0,SimulationInfo.ARENA_DIVIDER_RADIUS);
                     
                     prec = getPrecision(simulationInfo.holeDiameter / 2.0 + SimulationInfo.ARENA_DIVIDER_RADIUS * 2.0);
                     
@@ -802,13 +831,13 @@ public class GLPanel extends JPanel {
                     glutSolidTorus((float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)(simulationInfo.holeDiameter/2.0), prec2.x, prec.x + 5);
 
                     //Restore matrix state.
-                    glPopMatrix();
+                    gl.glPopMatrix();
                 }
 
 	    	//Draw all the spheres.
                 drawSpheres();
 		    
-	        glFlush();
+                gl.glFlush();
 	        if (traceMode) {
 	        	inTraceMode = true;
                 } else {
@@ -851,13 +880,13 @@ public class GLPanel extends JPanel {
                 {1, 2, 6, 5}
             };
             for (int i = 0; i < 6; i++) {
-                glBegin(GL_QUADS);
+                gl.glBegin(GL_QUADS);
                 for (int m = 0; m < 4; m++) {
                     float[] temp = vertices[indices[i][m]];
-                    glNormal3f(normals[i][0], normals[i][1], normals[i][2]);
-                    glVertex3f(temp[0] * size, temp[1] * size, temp[2] * size);
+                    gl.glNormal3f(normals[i][0], normals[i][1], normals[i][2]);
+                    gl.glVertex3f(temp[0] * size, temp[1] * size, temp[2] * size);
                 }
-                glEnd();
+                gl.glEnd();
             }
         }
         
@@ -875,19 +904,19 @@ public class GLPanel extends JPanel {
 	        float theta1 = theta + ringDelta;
 	        float cosTheta1 = (float) Math.cos(theta1);
 	        float sinTheta1 = (float) Math.sin(theta1);
-	        glBegin(GL_QUAD_STRIP);
+                gl.glBegin(GL_QUAD_STRIP);
 	        float phi = 0.0f;
 	        for (int j = nsides; j >= 0; j--) {
 	            phi += sideDelta;
 	            float cosPhi = (float) Math.cos(phi);
 	            float sinPhi = (float) Math.sin(phi);
 	            float dist = outerRadius + innerRadius * cosPhi;
-	            glNormal3f(cosTheta1 * cosPhi, -sinTheta1 * cosPhi, sinPhi);
-	            glVertex3f(cosTheta1 * dist, -sinTheta1 * dist, innerRadius * sinPhi);
-	            glNormal3f(cosTheta * cosPhi, -sinTheta * cosPhi, sinPhi);
-	            glVertex3f(cosTheta * dist, -sinTheta * dist, innerRadius * sinPhi);
+                    gl.glNormal3f(cosTheta1 * cosPhi, -sinTheta1 * cosPhi, sinPhi);
+                    gl.glVertex3f(cosTheta1 * dist, -sinTheta1 * dist, innerRadius * sinPhi);
+                    gl.glNormal3f(cosTheta * cosPhi, -sinTheta * cosPhi, sinPhi);
+                    gl.glVertex3f(cosTheta * dist, -sinTheta * dist, innerRadius * sinPhi);
 	        }
-	        glEnd();
+                gl.glEnd();
 	        theta = theta1;
 	        cosTheta = cosTheta1;
 	        sinTheta = sinTheta1;
@@ -911,13 +940,13 @@ public class GLPanel extends JPanel {
 		{
 			//Clear the screen.
 			if (inTraceMode) {
-                            glClear(GL_DEPTH_BUFFER_BIT);
+                            gl.glClear(GL_DEPTH_BUFFER_BIT);
                         } else {
-                            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                            gl.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			}
 			inTraceMode = traceMode;
-			glMatrixMode(GL_MODELVIEW);
-			glLoadIdentity();
+                        gl.glMatrixMode(GL_MODELVIEW);
+                        gl.glLoadIdentity();
                         
 			//Draw the piston.
 			if (simulationInfo.arenaType == ArenaType.MOVABLE_PISTON) {
@@ -925,44 +954,44 @@ public class GLPanel extends JPanel {
                         } else if (simulationInfo.arenaType == ArenaType.DIVIDED_ARENA || 
                                 (simulationInfo.maxwellDemonMode && !currentFrame.isArenaHoleOpen())) { //If there is a divider, then draw it using a cylinder.
                             colorComponents = divColor.getComponents(null);
-                            glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
+                            gl.glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
                             Point prec=getPrecision(SimulationInfo.ARENA_DIVIDER_RADIUS);
-                            glPushMatrix();
-                                    glTranslated(w2, h, 0);
-                                    glRotatef(90,1.0f,0.0f, 0.0f);
-                                    cylinder.draw((float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)h*2, prec.x, 1);
-                            glPopMatrix();
+                            gl.glPushMatrix();
+                                    gl.glTranslated(w2, h, 0);
+                                    gl.glRotatef(90,1.0f,0.0f, 0.0f);
+                                    glu.gluCylinder(cylinder, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)h*2, prec.x, 1);
+                            gl.glPopMatrix();
 			} else if (simulationInfo.arenaType == ArenaType.DIVIDED_ARENA_WITH_HOLE &&
                                 simulationInfo.dimension > 1) {
                             //Draw the divider with a hole by using 2 cylinders and 2 spheres.
                             double holeDiameter = simulationInfo.holeDiameter;
                             colorComponents = divColor.getComponents(null);
-                            glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
+                            gl.glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
                             Point prec=getPrecision(SimulationInfo.ARENA_DIVIDER_RADIUS);
-                            glPushMatrix();
-                                    glTranslated(w2, h, 0);
-                                    glRotatef(90,1.0f,0.0f, 0.0f);
-                                    cylinder.draw((float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)((h-holeDiameter)/2-SimulationInfo.ARENA_DIVIDER_RADIUS), prec.x, 1);
-                            glPopMatrix();
-                            glPushMatrix();
-                                    glTranslated(w2, ((h+holeDiameter)/2+SimulationInfo.ARENA_DIVIDER_RADIUS), 0);
-                                    sphere.draw((float)SimulationInfo.ARENA_DIVIDER_RADIUS, prec.x, prec.y);
-                            glPopMatrix();
-                            glPushMatrix();
-                                    glTranslated(w2, ((h-holeDiameter)/2-SimulationInfo.ARENA_DIVIDER_RADIUS), 0);
-                                    glRotatef(90,1.0f,0.0f, 0.0f);
-                                    cylinder.draw((float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)((h-holeDiameter)/2-SimulationInfo.ARENA_DIVIDER_RADIUS), prec.x, 1);
-                            glPopMatrix();
-                            glPushMatrix();
-                                    glTranslated(w2, ((h-holeDiameter)/2-SimulationInfo.ARENA_DIVIDER_RADIUS), 0);
-                                    sphere.draw((float)SimulationInfo.ARENA_DIVIDER_RADIUS, prec.x, prec.y);
-                            glPopMatrix();
+                            gl.glPushMatrix();
+                                    gl.glTranslated(w2, h, 0);
+                                    gl.glRotatef(90,1.0f,0.0f, 0.0f);
+                                    glu.gluCylinder(cylinder, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)((h-holeDiameter)/2-SimulationInfo.ARENA_DIVIDER_RADIUS), prec.x, 1);
+                            gl.glPopMatrix();
+                            gl.glPushMatrix();
+                                    gl.glTranslated(w2, ((h+holeDiameter)/2+SimulationInfo.ARENA_DIVIDER_RADIUS), 0);
+                                    glu.gluSphere(sphere, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, prec.x, prec.y);
+                            gl.glPopMatrix();
+                            gl.glPushMatrix();
+                                    gl.glTranslated(w2, ((h-holeDiameter)/2-SimulationInfo.ARENA_DIVIDER_RADIUS), 0);
+                                    gl.glRotatef(90,1.0f,0.0f, 0.0f);
+                                    glu.gluCylinder(cylinder, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)((h-holeDiameter)/2-SimulationInfo.ARENA_DIVIDER_RADIUS), prec.x, 1);
+                            gl.glPopMatrix();
+                            gl.glPushMatrix();
+                                    gl.glTranslated(w2, ((h-holeDiameter)/2-SimulationInfo.ARENA_DIVIDER_RADIUS), 0);
+                                    glu.gluSphere(sphere, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, prec.x, prec.y);
+                            gl.glPopMatrix();
 			}
 			
 			//Draw the spheres.                       
 			drawSpheres();
 			
-			glFlush();
+                        gl.glFlush();
 		}
 	     catch(Exception e) {
 	     	throw new RuntimeException(null, e);
@@ -972,14 +1001,6 @@ public class GLPanel extends JPanel {
 	//Calls the appropriate display function depending on the current dimension.
 	public void display()
 	{
-            try {
-                canvas.checkGLError();
-                //System.out.println(canvas.isCurrent());
-            } catch (Exception e) {
-                System.out.println(e);
-                e.printStackTrace();
-            }
-                
                 if (simulationInfo.maxwellDemonMode) {
                     arenaHoleOpen = currentFrame.isArenaHoleOpen();
                 }
@@ -992,53 +1013,53 @@ public class GLPanel extends JPanel {
 		rotate();
 
                 if (simulationInfo.dimension != 3) {
-                    glScaled(1.0 / simulationInfo.arenaXSize, 1.0 / simulationInfo.arenaXSize, 1.0);
+                    gl.glScaled(1.0 / simulationInfo.arenaXSize, 1.0 / simulationInfo.arenaXSize, 1.0);
                 } else if (simulationInfo.dimension == 3) {
                     double meterScale = Units.convert("m", "nm", 0.1);
-                    glScaled(meterScale, meterScale, meterScale);
+                    gl.glScaled(meterScale, meterScale, meterScale);
                 }
                 
 		//Update the point size.
 		if (tracePointSize!=curPointSize) {
 			curPointSize = tracePointSize;
-			glPointSize(curPointSize);
+                        gl.glPointSize(curPointSize);
 		}
 		//Set the background clear color.
 		float[] comps=background.getComponents(null);
-		glClearColor(comps[0],comps[1],comps[2],comps[3]);
+                gl.glClearColor(comps[0],comps[1],comps[2],comps[3]);
                 
 		//Switch lighting modes, if necessary.
 		if (!lightsOn&&lighting) {
-                    glEnable(GL_LIGHTING);
+                    gl.glEnable(GL_LIGHTING);
                     lightsOn=true;
 		} else if(lightsOn&&!lighting&& simulationInfo.dimension == 2) {
-                    glDisable(GL_LIGHTING);
+                    gl.glDisable(GL_LIGHTING);
                     lightsOn=false;
 		}		
 		
 		//Call the appropriate display function.
 		if (simulationInfo.dimension == 3) {
-                    glEnable(GL_LIGHT1);
-                    glDisable(GL_LIGHT2);
-                    glEnable(GL_CLIP_PLANE0);
-                    glEnable(GL_CLIP_PLANE1);
-                    glEnable(GL_CLIP_PLANE2);
-                    glEnable(GL_CLIP_PLANE3);
-                    glEnable(GL_CLIP_PLANE4);
-                    glEnable(GL_CLIP_PLANE5);
-                    glEnable(GL_LIGHTING);
+                    gl.glEnable(GL_LIGHT1);
+                    gl.glDisable(GL_LIGHT2);
+                    gl.glEnable(GL_CLIP_PLANE0);
+                    gl.glEnable(GL_CLIP_PLANE1);
+                    gl.glEnable(GL_CLIP_PLANE2);
+                    gl.glEnable(GL_CLIP_PLANE3);
+                    gl.glEnable(GL_CLIP_PLANE4);
+                    gl.glEnable(GL_CLIP_PLANE5);
+                    gl.glEnable(GL_LIGHTING);
                     lightsOn = true;
                     display3D();
                 } else {
-                    glDisable(GL_LIGHT0);
-                    glDisable(GL_LIGHT1);
-                    glEnable(GL_LIGHT2);
-                    glDisable(GL_CLIP_PLANE0);
-                    glDisable(GL_CLIP_PLANE1);
-                    glDisable(GL_CLIP_PLANE2);
-                    glDisable(GL_CLIP_PLANE3);
-                    glDisable(GL_CLIP_PLANE4);
-                    glDisable(GL_CLIP_PLANE5);
+                    gl.glDisable(GL_LIGHT0);
+                    gl.glDisable(GL_LIGHT1);
+                    gl.glEnable(GL_LIGHT2);
+                    gl.glDisable(GL_CLIP_PLANE0);
+                    gl.glDisable(GL_CLIP_PLANE1);
+                    gl.glDisable(GL_CLIP_PLANE2);
+                    gl.glDisable(GL_CLIP_PLANE3);
+                    gl.glDisable(GL_CLIP_PLANE4);
+                    gl.glDisable(GL_CLIP_PLANE5);
                     display2D();
                 }
 	}
@@ -1088,9 +1109,9 @@ public class GLPanel extends JPanel {
 	/** Called during zooms, arena resizes, and program initialization. */
 	public void reshapeThis(int x, int y, int width, int height) {
 		//Change the viewport.
-		glViewport(0, 0, width, height);
-		glMatrixMode(GL_PROJECTION);
-		glLoadIdentity();
+                gl.glViewport(0, 0, width, height);
+                gl.glMatrixMode(GL_PROJECTION);
+                gl.glLoadIdentity();
 
                 curZSize = Units.convert("m", "nm", simulationInfo.arenaZSize);
                 double viewingAngle = 30.0;
@@ -1103,18 +1124,18 @@ public class GLPanel extends JPanel {
 		//Set the projection mode.
                 if (simulationInfo.dimension != 3) {
                     if (simulationInfo.dimension == 2) {
-                        glOrtho(0, 1.0, 0, ySize / xSize, -200-simulationInfo.arenaZSize, 200);
+                        gl.glOrtho(0, 1.0, 0, ySize / xSize, -200-simulationInfo.arenaZSize, 200);
                     } else {
                         ySize = xSize / width * height;
-                        glOrtho(0, 1.0, 0, ySize / xSize, -200-simulationInfo.arenaZSize, 200);
+                        gl.glOrtho(0, 1.0, 0, ySize / xSize, -200-simulationInfo.arenaZSize, 200);
                     }
                 } else {
-                    GLU.gluPerspective((float)viewingAngle, (float)(simulationInfo.arenaXSize / simulationInfo.arenaYSize), 0.01F, (float)curZSize*30);
+                    glu.gluPerspective((float)viewingAngle, (float)(simulationInfo.arenaXSize / simulationInfo.arenaYSize), 0.01F, (float)curZSize*30);
                 }
                 
                 // set readings on scale sidebars
-                double verticalScale = ySize / height;
-                double horizontalScale = xSize / width;
+                double verticalScale = ySize / canvas.getHeight();
+                double horizontalScale = xSize / canvas.getWidth();
                 if (height == 0 || width == 0) { 
                     verticalScale = 0;
                     horizontalScale = 0;
@@ -1173,39 +1194,29 @@ public class GLPanel extends JPanel {
             }
         }
     
-    public void initGL() {
-//        try{
-//            Display.setParent(canvas);
-//            Display.create();
-//            init();
-//        } catch (LWJGLException e) {
-//            ErrorHandler.errorMessage(e);
-//            System.exit(-1);
-//        }
-    }
-
     public void drawFrame() {
-        canvas.paint(null);
-        this.repaintCanvas();
-    }
-    
-    public void repaintCanvas() {
-//            display();
-//            Display.update(false);
-//            Util.checkGLError();
-    }
-
-    /**
-     * This method must be called regularly so messages will be processed by lwjgl.
-     * Otherwise, user input events cannot get to Java's event queue on some 
-     * operating systems (Windows 7 at least)
-     */
-    public void processGLMessages() {
-        //Display.processMessages();
+        // JOGL acquires/releases the context and serializes rendering with AWT.
+        canvas.display();
     }
 
     public void destroyGLContext() {
-        Display.destroy();
+        // The dispose callback releases resources while the context is current.
+        canvas.destroy();
+    }
+
+    private void deleteQuadrics() {
+        if (sphere != null) {
+            glu.gluDeleteQuadric(sphere);
+            sphere = null;
+        }
+        if (cylinder != null) {
+            glu.gluDeleteQuadric(cylinder);
+            cylinder = null;
+        }
+        if (disk != null) {
+            glu.gluDeleteQuadric(disk);
+            disk = null;
+        }
     }
 
     public void setNextFrameToDisplay(FrameInfo frame) {
@@ -1398,3 +1409,4 @@ public class GLPanel extends JPanel {
         this.colorer = colorer;
     }
 }
+

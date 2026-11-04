@@ -1,104 +1,112 @@
-
+<?xml version="1.0" encoding="UTF-8"?>
 <project name="Boltzmann 3D" default="dist" basedir=".">
+    <property name="src" location="src"/>
+    <property name="bin" location="bin"/>
+    <property name="dist" location="dist"/>
+    <property name="deps" location="build/deps"/>
+    <property name="test.bin" location="build/test-classes"/>
+    <property name="java.release" value="25"/>
+    <property name="jogamp.version" value="2.6.0"/>
+    <property name="maven.repo" value="https://repo.maven.apache.org/maven2"/>
+    <property name="main.class" value="edu.byu.chem.boltzmann.fullapplication.Main"/>
+    <!-- Keep the generated Swing forms and layout library for this first port. -->
+    <property name="swing.jar" location="lib/swing-layout-1.0.4.jar"/>
 
-	<!-- PROPERTIES -->
-	<!-- ********** -->	
-	
-	<!-- Directory containing application source code -->
-	<property name="src" location="src"/>
-	
-	<!-- Directory containing Java libraries -->
-	<property name="lib" location="lib"/>
-	
-	<!-- Directory where the Java compiler puts .class files -->
-	<property name="bin" location="bin"/>
-	
-	<!-- Directory containing distribution files -->
-	<property name="dist" location="dist"/>
+    <path id="compile.classpath">
+        <pathelement location="${swing.jar}"/>
+        <fileset dir="${deps}" includes="*.jar" erroronmissingdir="false"/>
+    </path>
+    <path id="runtime.classpath">
+        <path refid="compile.classpath"/>
+        <pathelement location="${bin}"/>
+    </path>
 
-	<property name="boltz-jar" location="${dist}/Boltzmann3D.jar"/>
-		
-	<property name="util-src" location="distrib-utils/src"/>
-	<property name="util-bin" location="distrib-utils/bin"/>
+    <target name="init">
+        <mkdir dir="${bin}"/>
+        <mkdir dir="${dist}"/>
+        <mkdir dir="${deps}"/>
+    </target>
 
-	<!-- CLASS PATHS -->
-	<!-- *********** -->
-	<path id="lib-classpath">
-		<fileset dir="${lib}">
-			<include name="**/*.jar" />
-		</fileset>
-	</path>
-	
-	<path id="all-classpath">
-		<path refid="lib-classpath"/>
-		<pathelement location="${bin}"/>
-	</path>
-	
-	<path id="util-classpath">
-		<pathelement location="${util-bin}"/>
-	</path>
+    <target name="deps" depends="init" description="Fetch pinned JOGL and GlueGen Java libraries">
+        <get src="${maven.repo}/org/jogamp/jogl/jogl-all/${jogamp.version}/jogl-all-${jogamp.version}.jar"
+             dest="${deps}/jogl-all-${jogamp.version}.jar" skipexisting="true"/>
+        <get src="${maven.repo}/org/jogamp/gluegen/gluegen-rt/${jogamp.version}/gluegen-rt-${jogamp.version}.jar"
+             dest="${deps}/gluegen-rt-${jogamp.version}.jar" skipexisting="true"/>
+    </target>
 
-	<!-- TARGETS -->
-	<!-- ******* -->
-	<target name="init" description="create build directories">
-		<tstamp/>
-		<mkdir dir="${bin}"/>
-		<mkdir dir="${dist}"/>
-	</target>
+    <target name="platform">
+        <condition property="native.classifier" value="natives-macosx-universal">
+            <and><os family="mac"/><or><os arch="aarch64"/><os arch="arm64"/></or></and>
+        </condition>
+        <condition property="native.classifier" value="natives-windows-amd64">
+            <and><os family="windows"/><or><os arch="amd64"/><os arch="x86_64"/></or></and>
+        </condition>
+        <fail unless="native.classifier"
+              message="Native builds require an ARM64 JDK on Apple Silicon or an x64 JDK on Windows 10/11. Detected ${os.name}/${os.arch}."/>
+    </target>
 
-	<target name="clean" description="delete build files and directories">
-		<delete dir="${bin}"/>
-		<delete dir="${dist}"/>
-		<delete dir="${util-bin}"/>
-	</target>
+    <target name="native-deps" depends="deps,platform" description="Fetch natives for the current target">
+        <!-- JOGL extracts matching native libraries from these JARs itself. -->
+        <get src="${maven.repo}/org/jogamp/jogl/jogl-all/${jogamp.version}/jogl-all-${jogamp.version}-${native.classifier}.jar"
+             dest="${deps}/jogl-all-${jogamp.version}-${native.classifier}.jar" skipexisting="true"/>
+        <get src="${maven.repo}/org/jogamp/gluegen/gluegen-rt/${jogamp.version}/gluegen-rt-${jogamp.version}-${native.classifier}.jar"
+             dest="${deps}/gluegen-rt-${jogamp.version}-${native.classifier}.jar" skipexisting="true"/>
+    </target>
 
-	<target name="compile" depends="init" description="compile the source code">
-		<javac srcdir="${src}" 
-				target="1.6"
-				classpathref="lib-classpath" 
-				destdir="${bin}" 
-				debug="false" 
-				excludes="edu/byu/chem/boltzmann/model/statistics/WallPressure.java,edu/byu/chem/boltzmann/model/statistics/VirialPressure.java, edu/byu/chem/boltzmann/modules/idealgas*/**"
-				includeantruntime="false" />
-        <copy todir="${bin}">
-            <fileset dir="${src}" excludes="**/*.form,**/*.java" includes="**"/>
+    <target name="compile" depends="deps" description="Compile the desktop app with Java 25">
+        <!-- These obsolete applets and pressure classes were already excluded. -->
+        <javac srcdir="${src}" destdir="${bin}" release="${java.release}"
+               encoding="UTF-8" debug="true" includeantruntime="false"
+               classpathref="compile.classpath"
+               excludes="edu/byu/chem/boltzmann/model/statistics/WallPressure.java,edu/byu/chem/boltzmann/model/statistics/VirialPressure.java,edu/byu/chem/boltzmann/modules/idealgas*/**"/>
+        <copy todir="${bin}"><fileset dir="${src}" excludes="**/*.form,**/*.java"/></copy>
+    </target>
+
+    <target name="test" depends="compile" description="Check settings and physics without a display">
+        <mkdir dir="${test.bin}"/>
+        <javac srcdir="tests" destdir="${test.bin}" release="${java.release}"
+               encoding="UTF-8" includeantruntime="false" classpathref="runtime.classpath"/>
+        <java classname="edu.byu.chem.boltzmann.tests.ModernizationSmokeTest" fork="true" failonerror="true">
+            <classpath><path refid="runtime.classpath"/><pathelement location="${test.bin}"/></classpath>
+            <jvmarg value="-Djava.awt.headless=true"/>
+            <assertions><enable/></assertions>
+        </java>
+    </target>
+
+    <target name="run" depends="compile,native-deps" description="Run the Swing app with JOGL">
+        <java classname="${main.class}" fork="true" failonerror="true" classpathref="runtime.classpath">
+            <jvmarg value="--enable-native-access=ALL-UNNAMED"/>
+            <jvmarg value="--add-exports=java.desktop/sun.awt=ALL-UNNAMED"/>
+            <jvmarg value="--add-exports=java.desktop/sun.java2d=ALL-UNNAMED"/>
+            <assertions><enable/></assertions>
+        </java>
+    </target>
+
+    <target name="jar" depends="compile,native-deps" description="Build a runnable JAR and runtime libraries">
+        <delete dir="${dist}/lib"/>
+        <mkdir dir="${dist}/lib"/>
+        <copy file="${swing.jar}" todir="${dist}/lib"/>
+        <copy todir="${dist}/lib">
+            <fileset dir="${deps}" includes="jogl-all-${jogamp.version}.jar,gluegen-rt-${jogamp.version}.jar,*-${jogamp.version}-${native.classifier}.jar"/>
         </copy>
-	</target>
-	
-	<target name="init-utils" description="create build directories">
-		<tstamp/>
-		<mkdir dir="${util-bin}"/>
-		<mkdir dir="${dist}"/>
-	</target>
-	
-	<target name="compile-utils" depends="init-utils" description="compile the source code for the distribution utilities">
-		<javac srcdir="${util-src}" 
-				destdir="${util-bin}" 
-				debug="false"
-				excludes="edu/byu/chem/boltzmann/model/statistics/WallPressure.java,edu/byu/chem/boltzmann/model/statistics/VirialPressure.java, edu/byu/chem/boltzmann/modules/idealgas*/**"
-				includeantruntime="false" />
-	</target>
-	
-	<target name="run" depends="compile" description="run the full Boltzmann application">
-		<!-- If windows, libpath will be set first here. (It will not be overwritten) -->
-	    <condition property="libpath" value="lwjgl-bin/windows">
-			<os family="windows"/>
-		</condition>
-		<property name="libpath" value="lwjgl-bin/linux:lwjgl-bin/macosx"/>
-		<java classname="edu.byu.chem.boltzmann.fullapplication.Main" fork="yes">
-			<classpath>
-				<path refid="all-classpath"/>
-			</classpath>
-			<jvmarg value="-Djava.library.path=${libpath}"/>
-			<assertions>
-				<enable/>
-			</assertions>
-		</java>
-	</target>
-		
-	<target name="jar" depends="compile" description="create jar file containing all compiled Boltzmann classes">
-		<jar jarfile="${dist}/Boltzmann3D.jar" basedir="${bin}">
-		</jar>
-	</target>
-	
+        <manifestclasspath property="manifest.classpath" jarfile="${dist}/Boltzmann3D.jar">
+            <classpath><fileset dir="${dist}/lib" includes="*.jar"/></classpath>
+        </manifestclasspath>
+        <jar destfile="${dist}/Boltzmann3D.jar" basedir="${bin}">
+            <manifest>
+                <attribute name="Main-Class" value="${main.class}"/>
+                <attribute name="Class-Path" value="${manifest.classpath}"/>
+                <attribute name="Enable-Native-Access" value="ALL-UNNAMED"/>
+                <attribute name="Add-Exports" value="java.desktop/sun.awt java.desktop/sun.java2d"/>
+            </manifest>
+        </jar>
+        <copy file="LICENSE" todir="${dist}"/>
+    </target>
+    <target name="dist" depends="jar" description="Build the distribution for this platform"/>
+
+    <target name="clean" description="Remove compiled output; keep downloaded dependencies">
+        <delete dir="${bin}"/>
+        <delete dir="${dist}"/>
+        <delete dir="${test.bin}"/>
+    </target>
 </project>

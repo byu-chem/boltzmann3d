@@ -1,0 +1,45 @@
+name: Java 25 desktop build
+
+on:
+  push:
+    branches: [main, 'modernize/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: aarch64
+            artifact: macos-arm64
+          - os: windows-2022
+            arch: x64
+            artifact: windows-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          architecture: ${{ matrix.arch }}
+      - name: Install Ant on macOS
+        if: runner.os == 'macOS'
+        run: brew install ant
+      - name: Install Ant on Windows
+        if: runner.os == 'Windows'
+        run: choco install ant --no-progress --yes
+      - name: Build and check settings and physics
+        shell: bash
+        run: ant -noinput clean test dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Boltzmann3D-${{ matrix.artifact }}
+          path: dist/
+          if-no-files-found: error
