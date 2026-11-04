@@ -98,6 +98,8 @@ public abstract class Controller {
     /**
      * Allow the user to edit the simulation settings.
      */
+    public void showParticleSettings() { showSimSettings(); }
+
     public abstract void showSimSettings();
 
     /**

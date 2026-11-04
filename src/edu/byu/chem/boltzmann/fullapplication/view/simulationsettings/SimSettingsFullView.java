@@ -77,6 +77,7 @@ public class SimSettingsFullView extends javax.swing.JPanel implements SimSettin
     /** Creates new form View */
     public SimSettingsFullView() {
         initComponents();
+        configureParticleControls();
         
         pnlArenaSettings.addListener(new DimensionChangedListener(){
             @Override
@@ -105,6 +106,60 @@ public class SimSettingsFullView extends javax.swing.JPanel implements SimSettin
         
         btnReactedColor.setBackground(
                 DefaultParticleInfo.getDefaultType(1).defaultColor);
+    }
+
+    private final javax.swing.JSpinner particleTemperature = new javax.swing.JSpinner(
+            new javax.swing.SpinnerNumberModel(300.0, 0.0, (double) SimulationInfo.MAXIMUM_INITIAL_TEMPERATURE, 10.0));
+
+    private void configureParticleControls() {
+        setPreferredSize(new java.awt.Dimension(760, 540));
+        pnlParticles.removeAll();
+        pnlParticles.setLayout(new java.awt.BorderLayout(0, 12));
+        pnlParticles.setBorder(javax.swing.BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        javax.swing.JPanel temperature = new javax.swing.JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
+        temperature.add(new javax.swing.JLabel("Initial temperature (K), all particle types:"));
+        particleTemperature.setName("particleTemperature");
+        particleTemperature.setEditor(new javax.swing.JSpinner.NumberEditor(particleTemperature, "0.########"));
+        particleTemperature.setPreferredSize(new java.awt.Dimension(120, 28));
+        particleTemperature.addChangeListener(event -> pnlArenaSettings.setTemperature(
+                ((Number) particleTemperature.getValue()).doubleValue(), Units.Temperature.KELVIN));
+        temperature.add(particleTemperature);
+        pnlParticles.add(temperature, java.awt.BorderLayout.NORTH);
+        pnlParticles.add(new javax.swing.JScrollPane(pnlTypes), java.awt.BorderLayout.CENTER);
+        pnlAddTypes.removeAll();
+        pnlAddTypes.setPreferredSize(null);
+        btnAddType.setText("Add particle type");
+        btnAddType.setName("addParticleType");
+        btnAddType.setFont(javax.swing.UIManager.getFont("Button.font"));
+        pnlAddTypes.add(btnAddType);
+        pnlAddTypes.add(new javax.swing.JLabel("Apply restarts the simulation."));
+        pnlParticles.add(pnlAddTypes, java.awt.BorderLayout.SOUTH);
+        paneTabs.addChangeListener(event -> {
+            if (paneTabs.getSelectedComponent() == pnlParticles) {
+                particleTemperature.setValue(pnlArenaSettings.getTemperature(Units.Temperature.KELVIN));
+            }
+        });
+    }
+
+    public void selectParticleSettings() {
+        paneTabs.setSelectedComponent(pnlParticles);
+    }
+
+    public void commitParticleChanges() throws java.text.ParseException {
+        int total = 0;
+        for (TypeDescriptorImpl descriptor : typeDescriptors) {
+            descriptor.commitChanges();
+            total += descriptor.getNumParticles();
+        }
+        if (total == 0) throw new java.text.ParseException("Add at least one particle.", 0);
+        if (paneTabs.getSelectedComponent() == pnlParticles) {
+            particleTemperature.commitEdit();
+            double temperature = ((Number) particleTemperature.getValue()).doubleValue();
+            if (!Double.isFinite(temperature) || temperature < 0) {
+                throw new java.text.ParseException("Temperature must be a finite nonnegative number.", 0);
+            }
+            pnlArenaSettings.setTemperature(temperature, Units.Temperature.KELVIN);
+        }
     }
 
     @Override
@@ -819,9 +874,14 @@ public class SimSettingsFullView extends javax.swing.JPanel implements SimSettin
     }
     
     private void btnApplyActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnApplyActionPerformed
-        double maxParticleRadius = getMaximumAllowedRadius();
-        for(int i = 0; i < typeDescriptors.size(); i++)
-            typeDescriptors.get(i).updateMaxRadius(maxParticleRadius);
+        try {
+            commitParticleChanges();
+        } catch (java.text.ParseException invalid) {
+            javax.swing.JOptionPane.showMessageDialog(this, invalid.getMessage(),
+                    "Check particle settings", javax.swing.JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        try {
         
         //Setup a type that represents reacted particles if in reaction mode
         if (chkBoxReactionMode.isSelected()) {
@@ -832,17 +892,24 @@ public class SimSettingsFullView extends javax.swing.JPanel implements SimSettin
                     btnReactedColor.getBackground(),
                     "Reacted " + reactingType.displayName                    
                     ), 0);
-            controller.applySimulationSettings();
-
-            typeDescriptors.remove(reactingDescriptor);
-            pnlTypes.remove(reactingDescriptor);
-            validate();
+            try {
+                controller.applySimulationSettings();
+            } finally {
+                typeDescriptors.remove(reactingDescriptor);
+                pnlTypes.remove(reactingDescriptor);
+                pnlTypes.revalidate();
+                pnlTypes.repaint();
+            }
             
         } else {        
             controller.applySimulationSettings();
         }
         
         controller.hideView();
+        } catch (IllegalArgumentException invalid) {
+            javax.swing.JOptionPane.showMessageDialog(this, invalid.getMessage(),
+                    "Check particle settings", javax.swing.JOptionPane.ERROR_MESSAGE);
+        }
 }//GEN-LAST:event_btnApplyActionPerformed
     
     private void btnCloseActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnCloseActionPerformed
@@ -1045,7 +1112,8 @@ public class SimSettingsFullView extends javax.swing.JPanel implements SimSettin
     private void addDescriptorToFrame(TypeDescriptorImpl descriptor) {
         typeDescriptors.add(descriptor);
         pnlTypes.add(descriptor);
-        validate();
+        pnlTypes.revalidate();
+        pnlTypes.repaint();
     }
 
     public void removeTypeDescriptor(TypeDescriptorImpl descriptor) {
@@ -1056,7 +1124,8 @@ public class SimSettingsFullView extends javax.swing.JPanel implements SimSettin
         else{
             typeDescriptors.remove(descriptor);
             pnlTypes.remove(descriptor);
-            validate();
+            pnlTypes.revalidate();
+            pnlTypes.repaint();
         }
     }
 
@@ -1141,6 +1210,7 @@ public class SimSettingsFullView extends javax.swing.JPanel implements SimSettin
      */
     private void setInitialTemperature(double temperature) {
         pnlArenaSettings.setTemperature(temperature, Units.Temperature.KELVIN);
+        particleTemperature.setValue(temperature);
     }
 
     /**

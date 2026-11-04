@@ -91,7 +91,7 @@ On both targets, manually check:
 
 Packages include their own Java 25 runtime, JOGL libraries and matching natives.
 Users do not need Java, Ant or Homebrew installed. The initial package version
-is 3.0.0; override it with `-Dapp.version=3.0.1` for a subsequent package.
+is 3.1.0; override it with `-Dapp.version=3.1.1` for a subsequent package.
 
 On Apple Silicon, select the ARM64 JDK explicitly (Homebrew's Ant may otherwise
 choose its own newer JDK), then build:
@@ -105,7 +105,7 @@ ant package
 Outputs:
 
 - `packages/images/Boltzmann3D.app` — the standalone Mac app.
-- `packages/installers/Boltzmann3D-3.0.0.dmg` — open it and drag the app to Applications.
+- `packages/installers/Boltzmann3D-3.1.0.dmg` — open it and drag the app to Applications.
 
 `ant package` needs normal desktop access for macOS disk-image tooling.
 `ant package-image` builds just the app; `ant test-packaged` checks the shipped
@@ -127,7 +127,7 @@ ant package
 Outputs:
 
 - `packages/images/Boltzmann3D/` — a portable app directory with Boltzmann3D.exe.
-- `packages/installers/Boltzmann3D-3.0.0.exe` — a per-user installer with a Start
+- `packages/installers/Boltzmann3D-3.1.0.exe` — a per-user installer with a Start
   menu entry, desktop shortcut and uninstall support.
 
 Packages must be built on their target operating system. GitHub Actions builds
@@ -145,3 +145,18 @@ a Developer ID signature. Signing/notarization for public distribution is a
 separate release step.
 
 Original contact: Derek Manwaring, manwaringsandals@gmail.com.
+
+### Particle controls (3.1 development)
+
+Use **Particles & temperature…** above the statistics panel to open the particle
+settings directly. Each row edits a particle type's name, color, count, radius in
+nanometers and mass in atomic mass units. **Add particle type** adds a row; the
+minus button removes it. The initial temperature in kelvin applies to all types.
+**Apply** restarts the simulation with the new initial conditions. Requests that
+exceed the arena capacity show an error so that counts are not silently reduced.
+The Arena tab still controls dimensions, arena size and boundary conditions.
+
+`ant test` checks typed particle edits, decimal masses, temperature, capacity
+validation and settings/physics round trips through 2D and 3D in US and German
+locales. `ant test-render` additionally checks repeated dimension transitions and
+rejects a particle that fills the 2D framebuffer.

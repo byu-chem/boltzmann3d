@@ -144,7 +144,8 @@ public class GLPanel extends JPanel {
         
         /** 3D OpenGL uses nanometers; the established 1D/2D paths still use meters. */
         private double renderLength(double meters) {
-            return simulationInfo.dimension == 3 ? meters * 1.0e9 : meters;
+            // Use one coordinate scale in every dimension, including after a switch.
+            return meters * 1.0e9;
         }
 
         private void translate(double x, double y, double z) {
@@ -1042,10 +1043,6 @@ public class GLPanel extends JPanel {
 		//Rotate the arena due to the arrow keys being pressed, if necessary.
 		rotate();
 
-                if (simulationInfo.dimension != 3) {
-                    gl.glScaled(1.0 / simulationInfo.arenaXSize, 1.0 / simulationInfo.arenaXSize, 1.0);
-                }
-                
 		//Update the point size.
 		if (tracePointSize!=curPointSize) {
 			curPointSize = tracePointSize;
@@ -1081,6 +1078,8 @@ public class GLPanel extends JPanel {
                     gl.glDisable(GL_LIGHT0);
                     gl.glDisable(GL_LIGHT1);
                     gl.glEnable(GL_LIGHT2);
+                    if (lighting) gl.glEnable(GL_LIGHTING); else gl.glDisable(GL_LIGHTING);
+                    lightsOn = lighting;
                     gl.glDisable(GL_CLIP_PLANE0);
                     gl.glDisable(GL_CLIP_PLANE1);
                     gl.glDisable(GL_CLIP_PLANE2);
@@ -1151,10 +1150,10 @@ public class GLPanel extends JPanel {
 		//Set the projection mode.
                 if (simulationInfo.dimension != 3) {
                     if (simulationInfo.dimension == 2) {
-                        gl.glOrtho(0, 1.0, 0, ySize / xSize, -200-simulationInfo.arenaZSize, 200);
+                        gl.glOrtho(0, xSize, 0, ySize, -200 - renderLength(simulationInfo.arenaZSize), 200);
                     } else {
                         ySize = xSize / width * height;
-                        gl.glOrtho(0, 1.0, 0, ySize / xSize, -200-simulationInfo.arenaZSize, 200);
+                        gl.glOrtho(0, xSize, 0, ySize, -200 - renderLength(simulationInfo.arenaZSize), 200);
                     }
                 } else {
                     // Geometry, camera and clipping distances now all use nanometers.
@@ -1200,6 +1199,8 @@ public class GLPanel extends JPanel {
             }
 
             simulationInfo = info;
+            currentFrame = null;
+            inTraceMode = false;
         }
 
         public void rescaleArena(int availableWidth, int availableHeight) {

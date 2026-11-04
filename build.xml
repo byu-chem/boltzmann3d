@@ -71,6 +71,10 @@
             <jvmarg value="-Djava.awt.headless=true"/>
             <assertions><enable/></assertions>
         </java>
+        <java classname="edu.byu.chem.boltzmann.tests.ParticleControlsSmokeTest" fork="true" failonerror="true">
+            <classpath><path refid="runtime.classpath"/><pathelement location="${test.bin}"/></classpath>
+            <jvmarg value="-Djava.awt.headless=true"/>
+        </java>
     </target>
 
     <target name="test-render" depends="test,native-deps" description="Check rendered particle pixels (requires a display)">

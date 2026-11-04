@@ -143,6 +143,11 @@ public class ApplicationController extends Controller {
     }
 
     @Override
+    public void showParticleSettings() {
+        simSettingsWindow.showParticleSettings();
+    }
+
+    @Override
     public void showSimSettings() {
         simSettingsWindow.setVisible(true);
     }

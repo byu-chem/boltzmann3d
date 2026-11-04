@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project name="Boltzmann3D packaging">
     <property name="app.name" value="Boltzmann3D"/>
-    <property name="app.version" value="3.0.0"/>
+    <property name="app.version" value="3.1.0"/>
     <property name="app.vendor" value="BYU Chemistry"/>
     <property name="app.description" value="A kinetic theory demonstrator"/>
     <property name="package.root" location="packages"/>

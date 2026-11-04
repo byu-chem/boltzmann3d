@@ -66,6 +66,12 @@ public class SimSettingsWindow extends javax.swing.JFrame {
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "hide");
     }
 
+    public void showParticleSettings() {
+        view.selectParticleSettings();
+        setVisible(true);
+        toFront();
+    }
+
     public SimSettingsView getView() {
         return view;
     }

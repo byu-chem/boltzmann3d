@@ -112,6 +112,11 @@ public class MainGuiFullView extends
         pnlControls.add(txtFldSimTime, 0);
         pnlControls.add(playButton, 3);
         pnlControls.add(speedSpinner, 6);
+        javax.swing.JButton particles = new javax.swing.JButton("Particles & temperature…");
+        particles.setName("particleSettings");
+        particles.addActionListener(event -> controller.showParticleSettings());
+        pnlStats.add(particles, 0);
+
         
         plotPanel = new StatPanel();
         plotPanel.addMouseListener(new java.awt.event.MouseAdapter() {

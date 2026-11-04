@@ -69,6 +69,8 @@ public class MainGuiController {
         });
     }
     
+    public void showParticleSettings() { rootController.showParticleSettings(); }
+
     public void newSimulation() {
         rootController.showSimSettings();
     }

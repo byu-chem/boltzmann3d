@@ -37,6 +37,7 @@ public class TypeDescriptorImpl extends javax.swing.JPanel implements TypeDescri
         this.mainFrame = mainFrame;
 
         initComponents();
+        configureEditors();
 
         txtFldName.setText(typeName);
 
@@ -60,14 +61,40 @@ public class TypeDescriptorImpl extends javax.swing.JPanel implements TypeDescri
         this.mainFrame = mainFrame;
 
         initComponents();
+        configureEditors();
 
         txtFldName.setText(type.displayName);
         btnColor.setBackground(type.defaultColor);
         spnrNumParticles.setValue(numParticles);
-        spnrMass.setValue(Math.floor(type.particleMass));
+        spnrMass.setValue(type.particleMass);
         spnrRadius.setValue(Units.convert("m", "nm", type.particleRadius));
 
         setFieldSizes(header);
+    }
+
+    private void configureEditors() {
+        txtFldName.setName("particleName");
+        spnrNumParticles.setName("particleCount");
+        spnrRadius.setName("particleRadius");
+        spnrMass.setName("particleMass");
+        spnrMass.setModel(new javax.swing.SpinnerNumberModel(2.0, 0.001, 1.0e9, 0.1));
+        spnrRadius.setModel(new javax.swing.SpinnerNumberModel(1.0, 0.001, 1.0e6, 0.1));
+        spnrMass.setEditor(new javax.swing.JSpinner.NumberEditor(spnrMass, "0.########"));
+        spnrRadius.setEditor(new javax.swing.JSpinner.NumberEditor(spnrRadius, "0.########"));
+        setAlignmentX(LEFT_ALIGNMENT);
+        setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
+    }
+
+    /** Commit text before reading spinner values, including edits made without Enter. */
+    public void commitChanges() throws java.text.ParseException {
+        spnrNumParticles.commitEdit();
+        spnrMass.commitEdit();
+        spnrRadius.commitEdit();
+        double mass = ((Number) spnrMass.getValue()).doubleValue();
+        double radius = ((Number) spnrRadius.getValue()).doubleValue();
+        if (!Double.isFinite(mass) || mass <= 0 || !Double.isFinite(radius) || radius <= 0) {
+            throw new java.text.ParseException("Mass and radius must be finite positive numbers.", 0);
+        }
     }
 
     private void setFieldSizes(TypesHeader header) {

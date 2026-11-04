@@ -26,6 +26,8 @@ public class TypesHeader extends javax.swing.JPanel {
 
     public TypesHeader() {
         initComponents();
+        setAlignmentX(LEFT_ALIGNMENT);
+        setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, 32));
     }
 
     /** This method is called from within the constructor to

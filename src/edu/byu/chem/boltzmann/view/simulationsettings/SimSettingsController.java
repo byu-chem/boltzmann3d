@@ -113,72 +113,13 @@ public class SimSettingsController implements SimulationInfoSupplier {
 
         dimension = view.getDimension();
         
-        //Make sure there aren't too many particles for the occupiable volume
-        limitTotalParticles();
+        // Reject impossible requests instead of silently removing particles.
+        if (getTotalNeededVolume() > getAvailableVolume()) {
+            throw new IllegalArgumentException("These particles do not fit in the arena. Reduce their count or radius, or enlarge the arena.");
+        }
         
         randomlyPlaceParticles();
         assignRandomVelocities();
-    }
-    
-    private void limitTotalParticles() {
-        double totalNeededVolume = getTotalNeededVolume();
-        
-        double availableVolume = getAvailableVolume();
-        
-        double excessParticleVolume = totalNeededVolume  - availableVolume;
-        
-        if (excessParticleVolume > 0.0) {
-            reduceParticleVolume(excessParticleVolume);
-        }
-    }
-    
-    private void reduceParticleVolume(double excessParticleVolume) {
-        double volumeEliminated = 0.0;
-        int greatestRadiusType;
-        
-        while (true) {
-            
-            greatestRadiusType = findGreatestRadiusType();
-            
-            double particleVolume = 0.0;
-            double particleDiameter = 2.0 * particleTypes[greatestRadiusType].particleRadius;
-            switch (dimension) {
-                case 1:
-                    particleVolume = particleDiameter;
-                    break;
-                case 2:
-                    particleVolume = particleDiameter * particleDiameter;
-                    break;
-                case 3:
-                    particleVolume = particleDiameter * particleDiameter * particleDiameter;
-            }
-            
-            while ((volumeEliminated < excessParticleVolume) &&
-                    numberOfParticles[greatestRadiusType] > 0) {
-                numberOfParticles[greatestRadiusType]--;
-                volumeEliminated += particleVolume;
-            }
-            
-            if (volumeEliminated >= excessParticleVolume) {
-                break;
-            }
-        }
-    }
-    
-    private int findGreatestRadiusType() {
-        int greatestRadiusType = 0;
-        double greatestRadius = 0.0;
-        
-        for (int i = 0; i < particleTypes.length; i++) {
-            if ((particleTypes[i].particleRadius > greatestRadius) &&
-                    (numberOfParticles[i] > 0)) {
-                
-                greatestRadiusType = i;
-                greatestRadius = particleTypes[i].particleRadius;  
-            }
-        }
-        
-        return greatestRadiusType;
     }
     
     private double getAvailableVolume() {
@@ -499,10 +440,13 @@ public class SimSettingsController implements SimulationInfoSupplier {
         return recStatsArray;
     }
 
-    public void applySimulationSettings() {
+    public SimulationInfo createSimulationInfo() {
         setupSimulationInfo();
-        final SimulationInfo simInfo = new SimulationInfo(SimSettingsController.this);
-        rootController.setSimulationInfo(simInfo);
+        return new SimulationInfo(this);
+    }
+
+    public void applySimulationSettings() {
+        rootController.setSimulationInfo(createSimulationInfo());
     }
 
     public void hideView() {

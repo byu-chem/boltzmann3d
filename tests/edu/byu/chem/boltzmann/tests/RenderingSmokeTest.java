@@ -38,7 +38,7 @@ public final class RenderingSmokeTest {
                 window.pack();
                 window.setVisible(true);
                 // Switching back to 2D also checks that 3D state does not leak.
-                for (int dimension : new int[] {2, 3, 1, 2}) {
+                for (int dimension : new int[] {2, 3, 2, 3, 2, 1, 2}) {
                     SimulationInfo info = settings(dimension);
                     panel.setSimulationInfo(info);
                     panel.setNextFrameToDisplay(centeredParticle(info));
@@ -147,6 +147,9 @@ public final class RenderingSmokeTest {
                 if (green > 20 && red > green && green > blue && red < green * 1.5) {
                     wallPixels++;
                 }
+            }
+            if (!label.startsWith("3D") && redPixels > width * height / 4) {
+                throw new AssertionError(label + ": particle fills the screen (" + redPixels + " pixels)");
             }
             if (redPixels < 20) {
                 double[] modelview = new double[16];

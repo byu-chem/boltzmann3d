@@ -32,14 +32,14 @@ public class DoubleTextField extends NumericTextField<Double> {
 
     @Override
     public Double getNumericValue() {
-        return Double.parseDouble(getText());
+        return Double.parseDouble(getText().trim().replace(',', '.'));
     }
 
     @Override
     public boolean isInputStringValid() {
         try {
-            Double.parseDouble(getText());
-            return true;
+            double value = getNumericValue();
+            return Double.isFinite(value);
         } catch (NumberFormatException ex) {
             return false;
         }
@@ -47,6 +47,7 @@ public class DoubleTextField extends NumericTextField<Double> {
     
     @Override
     public void setNumericValue(Double value) {
-        setText(ErrorHandler.format(value, getColumns()));
+        // Preserve numeric precision and use a parseable decimal separator.
+        super.setNumericValue(value);
     }
 }
