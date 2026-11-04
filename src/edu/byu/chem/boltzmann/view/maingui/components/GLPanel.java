@@ -563,8 +563,8 @@ public class GLPanel extends JPanel {
                     double relH = canvas.getHeight() * (simulationInfo.arenaXSize / canvas.getWidth());
 
                     gl.glPushMatrix();
-                        glTranslated (pistonPos + SimulationInfo.PISTON_VALVE_RADIUS, relH, 0);
-                        glRotatef (90,1.0f,0.0f, 0.0f);
+                        gl.glTranslated(pistonPos + SimulationInfo.PISTON_VALVE_RADIUS, relH, 0);
+                        gl.glRotatef(90,1.0f,0.0f, 0.0f);
                         glu.gluCylinder(cylinder, (float)SimulationInfo.PISTON_VALVE_RADIUS, (float)SimulationInfo.PISTON_VALVE_RADIUS, (float)relH, prec.x, 1);
                     gl.glPopMatrix();
 
