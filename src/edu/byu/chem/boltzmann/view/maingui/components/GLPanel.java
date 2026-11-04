@@ -662,8 +662,11 @@ public class GLPanel extends JPanel {
                 floatBuffer.flip();
                 gl.glLightfv(GL_LIGHT1, GL_POSITION, floatBuffer);
 
-                //Set the camera position.
-                glu.gluLookAt((float)halfWidth, (float)halfHeight, (float)camz, (float)halfWidth, (float)halfHeight, 0F, 0F, 1F, 0F);
+                // The camera looks straight down -Z, with +Y up. Its view rotation
+                // is identity, so translating by the negative eye position is
+                // exactly equivalent to lookAt. JOGL's float lookAt normalizes
+                // nanometer-scale vectors to zero and collapses the view matrix.
+                gl.glTranslated(-halfWidth, -halfHeight, -camz);
 
                 //Rotate the world to make it look like the camera moved.
                 gl.glTranslated(halfWidth,halfHeight,halfDepth);

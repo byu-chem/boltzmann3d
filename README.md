@@ -70,6 +70,12 @@ GitHub Actions builds and runs these checks with Java 25 on macOS ARM64 and
 Windows x64, then uploads each dist directory. Hosted builds do not validate
 Windows 10 or interactive graphics.
 
+With a graphical desktop and working OpenGL driver, run `ant test-render` for
+the graphics regression check. It briefly opens a test window, reads particle
+pixels from the framebuffer in 1D/2D/3D, and checks 3D rotation, resizing and
+switching back to 2D. Run this from a normal desktop terminal; the headless
+`ant test` checks do not open a window.
+
 On both targets, manually check:
 
 - Startup and particle rendering in 1D, 2D and 3D.
