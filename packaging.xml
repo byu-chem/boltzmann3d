@@ -64,7 +64,7 @@
             <arg value="--icon"/><arg file="packaging/boltzmann3d.icns"/>
             <arg value="--mac-package-identifier"/><arg value="edu.byu.chem.boltzmann3d"/>
             <arg value="--mac-package-name"/><arg value="Boltzmann3D"/>
-            <arg value="--mac-app-category"/><arg value="public.app-category.education"/>
+            <arg value="--mac-app-category"/><arg value="education"/>
         </build-app-image>
     </target>
 
@@ -135,6 +135,7 @@
     <target name="package-installer-windows" depends="test-packaged" if="package.windows">
         <delete file="${package.installers}/${app.name}-${app.version}.exe"/>
         <exec executable="${jpackage.bin}" failonerror="true">
+            <arg value="--verbose"/>
             <arg value="--type"/><arg value="exe"/>
             <arg value="--name"/><arg value="${app.name}"/>
             <arg value="--app-version"/><arg value="${app.version}"/>

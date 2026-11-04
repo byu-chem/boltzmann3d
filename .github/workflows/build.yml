@@ -48,8 +48,12 @@ jobs:
         shell: pwsh
         run: |
           $wixTools = Join-Path $env:RUNNER_TEMP 'boltzmann-wix'
-          dotnet tool install wix --tool-path $wixTools --version 5.0.2
-          & (Join-Path $wixTools 'wix.exe') extension add --global WixToolset.UI.wixext/5.0.2
+          dotnet tool install wix --tool-path $wixTools --version 5.0.2 2>&1 | Tee-Object -FilePath build.log -Append
+          if ($LASTEXITCODE -ne 0) { throw 'WiX installation failed' }
+          & (Join-Path $wixTools 'wix.exe') extension add --global WixToolset.UI.wixext/5.0.2 2>&1 | Tee-Object -FilePath build.log -Append
+          if ($LASTEXITCODE -ne 0) { throw 'WiX UI extension installation failed' }
+          & (Join-Path $wixTools 'wix.exe') extension add --global WixToolset.Util.wixext/5.0.2 2>&1 | Tee-Object -FilePath build.log -Append
+          if ($LASTEXITCODE -ne 0) { throw 'WiX utility extension installation failed' }
           $wixTools | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Package and verify the Mac app and DMG
         if: runner.os == 'macOS'

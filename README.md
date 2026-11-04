@@ -120,6 +120,7 @@ on PATH. One way to install WiX with the .NET SDK is:
 ```powershell
 dotnet tool install --global wix --version 5.0.2
 wix extension add --global WixToolset.UI.wixext/5.0.2
+wix extension add --global WixToolset.Util.wixext/5.0.2
 ant package
 ```
 
@@ -132,7 +133,9 @@ Outputs:
 Packages must be built on their target operating system. GitHub Actions builds
 both installers and uploads them as `Boltzmann3D-macos-arm64-installer` and
 `Boltzmann3D-windows-x64-installer` artifacts. It verifies each bundled runtime
-and checks packaged Mac graphics. Installer archives preserve the permissions
+and checks packaged Mac graphics. The Windows installer is also installed into
+a temporary directory, checked with its installed runtime, then uninstalled.
+Installer archives preserve the permissions
 needed by the Mac app; use the DMG artifact instead of downloading an app folder
 as a generic ZIP. `ant clean-packages` removes generated package output.
 
