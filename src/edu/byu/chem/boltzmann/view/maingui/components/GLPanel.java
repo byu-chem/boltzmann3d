@@ -142,7 +142,7 @@ public class GLPanel extends JPanel {
         private DoubleBuffer toBuffer(double[] array){//perform myBuffer.flip() before using
             return Buffers.newDirectDoubleBuffer(array.length).put(array);}
         
-        /** 3D OpenGL uses nanometers; the established 1D/2D paths still use meters. */
+        /** Render lengths in nanometers, independently of the simulation dimension. */
         private double renderLength(double meters) {
             // Use one coordinate scale in every dimension, including after a switch.
             return meters * 1.0e9;
@@ -509,7 +509,7 @@ public class GLPanel extends JPanel {
 		} else {
 
                     gl.glPushMatrix();
-                        translate(x, y, z);
+                        translate(x, y, simulationInfo.dimension == 3 ? z : 0);
                         drawSphereSurface((float)rad, prec.x, prec.y);
 
                         //Draw an inside-out sphere in 3D periodic mode so you can
@@ -1150,10 +1150,10 @@ public class GLPanel extends JPanel {
 		//Set the projection mode.
                 if (simulationInfo.dimension != 3) {
                     if (simulationInfo.dimension == 2) {
-                        gl.glOrtho(0, xSize, 0, ySize, -200 - renderLength(simulationInfo.arenaZSize), 200);
+                        gl.glOrtho(0, xSize, 0, ySize, -2 * Math.max(xSize, ySize), 2 * Math.max(xSize, ySize));
                     } else {
                         ySize = xSize / width * height;
-                        gl.glOrtho(0, xSize, 0, ySize, -200 - renderLength(simulationInfo.arenaZSize), 200);
+                        gl.glOrtho(0, xSize, 0, ySize, -2 * Math.max(xSize, ySize), 2 * Math.max(xSize, ySize));
                     }
                 } else {
                     // Geometry, camera and clipping distances now all use nanometers.
