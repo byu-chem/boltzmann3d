@@ -25,10 +25,12 @@ import java.awt.Color;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.Locale;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.NoSuchElementException;
@@ -109,96 +111,47 @@ public class Load
 		}
 	}
 	
-	/** Loads a settings file, either new-style or old-style (suffix doesn't matter) */
-	public SimulationInfo loadFile(File file) throws FileNotFoundException, IOException, ParseException
-	{
-		setLastLoadedURL(file);
-		int index = file.getName().lastIndexOf(".");
-		String suffix = (index < 0 ? "" : file.getName().substring(index).toLowerCase());
-		if (file.isFile() && (suffix.equals(".set") || suffix.equals(".set2")))
-		{
-//			try
-//			{
-				BufferedReader fileIn = new BufferedReader(new FileReader(file));
-				String firstLine;
-                                SimulationInfo newInfo = null;
-				if ((firstLine = fileIn.readLine()) != null)
-				{
-                                    newInfo = loadNewSetFile(file);
-				} 
-				fileIn.close();
-                                return newInfo;
-//			}
-//			catch (Exception e)
-//			{
-//				throw new RuntimeException("Unable to load settings file.", e);
-//			}
-		} else {
-                    return null;
-                }
-	}
+    /** Loads the existing settings format from either supported extension. */
+    public SimulationInfo loadFile(File file) throws IOException, ParseException {
+        setLastLoadedURL(file);
+        if (!file.isFile() || !hasSettingsSuffix(file.getName())) {
+            return null;
+        }
+        try (BufferedReader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
+            return readSettings(reader);
+        }
+    }
 
-	/** Loads a settings file, either new-style or old-style (suffix doesn't matter) */
-	public SimulationInfo loadFile(URL url) throws FileNotFoundException {
-            
-		setLastLoadedURL(url);
-		File file = new File(url.getFile());
-                
-		int index = file.getName().lastIndexOf(".");
-		String suffix = (index < 0 ? "" : file.getName().substring(index).toLowerCase());
-		if (suffix.equals(".set") || suffix.equals(".set2")) {
-                    
-                    try {
-                        BufferedReader fileIn = 
-                                new BufferedReader(new InputStreamReader(url.openConnection().getInputStream()));
-                        String firstLine;
-                        if ((firstLine = fileIn.readLine()) != null) {			
-                                //Old Style
-//					if (firstLine.equals("------Global Settings(Required)-------"))
-//						loadSetFile(url);
-//					//New Style
-//					else
-                            return loadNewSetFile(url);
-                            
-                        } else {                       
-                            fileIn.close();
-                            return null;
-                        }
-                        
-                    } catch (Exception e) {
-                        throw new FileNotFoundException("Unable to load settings file.");
-                    }
-                        
-		} else {
-                    return null;
-                }
-	}
-	
-	private SimulationInfo loadNewSetFile(final File file) throws FileNotFoundException, IOException, ParseException
-	{
-		setLastLoadedURL(file);
-//		try
-//		{
-			BufferedReader fileIn = new BufferedReader(new FileReader(file));
-			return loadNewSetFile(fileIn);
-//		}
-//		catch (Exception e) {
-//			throw new RuntimeException("Unable to load settings file", e);
-//		}
-	}
-	
-	private SimulationInfo loadNewSetFile(final URL url)
-	{
-		setLastLoadedURL(url);
-		try {
-			BufferedReader fileIn = new BufferedReader(new InputStreamReader(url.openStream()));
-			return loadNewSetFile(fileIn);
-		}
-		catch (Exception e) {
-			throw new RuntimeException("Unable to load settings file", e);
-		}
-	}	
-	
+    /** Also supports resources inside a JAR without leaking their input streams. */
+    public SimulationInfo loadFile(URL url) throws FileNotFoundException {
+        setLastLoadedURL(url);
+        if (!hasSettingsSuffix(url.getPath())) {
+            return null;
+        }
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(url.openStream(), StandardCharsets.UTF_8))) {
+            return readSettings(reader);
+        } catch (Exception cause) {
+            FileNotFoundException failure = new FileNotFoundException("Unable to load settings file: " + url);
+            failure.initCause(cause);
+            throw failure;
+        }
+    }
+
+    private static boolean hasSettingsSuffix(String name) {
+        String lowerName = name.toLowerCase(Locale.ROOT);
+        return lowerName.endsWith(".set") || lowerName.endsWith(".set2");
+    }
+
+    private SimulationInfo readSettings(BufferedReader reader) throws IOException, ParseException {
+        reader.mark(1);
+        if (reader.read() == -1) {
+            return null;
+        }
+        reader.reset();
+        return loadNewSetFile(reader);
+    }
+
 	private SimulationInfo loadNewSetFile(BufferedReader fileIn)
 	throws IOException, ParseException {
             

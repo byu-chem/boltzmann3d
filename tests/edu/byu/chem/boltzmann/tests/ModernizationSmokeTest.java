@@ -37,6 +37,11 @@ public final class ModernizationSmokeTest {
                         require(fromFile.dimension == fromResource.dimension,
                                 "Dimension changed when loading a file");
                         checkSimulation(fromFile);
+                        SimulationInfo fromURL = new Load(null).loadFile(settings.toUri().toURL());
+                        require(fromURL.totalNumParticles == fromResource.totalNumParticles,
+                                "Particle count changed when loading a file URL");
+                        // Windows rejects deletion if either loader leaves a stream open.
+                        Files.delete(settings);
                     }
                 } finally {
                     try (var files = Files.list(directory)) {
