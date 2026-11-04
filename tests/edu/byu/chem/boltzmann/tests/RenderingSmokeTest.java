@@ -53,6 +53,12 @@ public final class RenderingSmokeTest {
                         window.setSize(500, 400);
                         window.validate();
                         checkParticlePixels(panel, "3D after resizing");
+                        for (String boundary : new String[] {"PERIODIC", "DIVIDED", "HOLE", "PISTON"}) {
+                            SimulationInfo variant = settings(3, boundary);
+                            panel.setSimulationInfo(variant);
+                            panel.setNextFrameToDisplay(centeredParticle(variant));
+                            checkParticlePixels(panel, "3D " + boundary);
+                        }
                     }
                 }
             } catch (Exception failure) {
@@ -61,17 +67,22 @@ public final class RenderingSmokeTest {
                 window.dispose();
             }
         });
-        System.out.println("PASS: visible particle pixels in 1D/2D/3D, rotation, resizing and dimension switching");
+        System.out.println("PASS: visible particle pixels in 1D/2D/3D, rotation, resizing, boundary modes and dimension switching");
     }
 
     private static SimulationInfo settings(int dimension) throws Exception {
+        return settings(dimension, "REFLECTING");
+    }
+
+    private static SimulationInfo settings(int dimension, String boundary) throws Exception {
         String text;
         try (var input = ResourceLoader.getDefaultSetFileURL().openStream()) {
             text = new String(input.readAllBytes(), StandardCharsets.UTF_8);
         }
         Path file = Files.createTempFile("Boltzmann render settings ", ".set2");
         try {
-            Files.writeString(file, text.replace("dimensions 2", "dimensions " + dimension));
+            Files.writeString(file, text.replace("dimensions 2", "dimensions " + dimension)
+                    .replace("boundary REFLECTING", "boundary " + boundary));
             return new Load(null).loadFile(file.toFile());
         } finally {
             Files.delete(file);
@@ -103,6 +114,14 @@ public final class RenderingSmokeTest {
             int height = drawable.getSurfaceHeight();
             ByteBuffer pixels = Buffers.newDirectByteBuffer(width * height * 4);
             checkError(gl, label + " rendering before readback");
+            if (label.startsWith("3D")) {
+                double[] projection = new double[16];
+                gl.glGetDoublev(GL2.GL_PROJECTION_MATRIX, projection, 0);
+                // In the test frustum clip W must be -eye Z, without a unit-conversion scale.
+                if (Math.abs(projection[11] + 1.0) > 1e-6) {
+                    throw new AssertionError(label + ": unit conversion leaked into the projection matrix");
+                }
+            }
             // macOS may render GLCanvas through an FBO, whose color attachment
             // must be selected instead of the window-system GL_BACK buffer.
             int readBuffer = drawable.getContext().getDefaultReadBuffer();
@@ -111,10 +130,14 @@ public final class RenderingSmokeTest {
             gl.glReadPixels(0, 0, width, height, GL2.GL_RGBA, GL2.GL_UNSIGNED_BYTE, pixels);
             checkError(gl, label + " reading pixels");
             int redPixels = 0;
+            int coloredPixels = 0;
             for (int offset = 0; offset < pixels.capacity(); offset += 4) {
                 int red = Byte.toUnsignedInt(pixels.get(offset));
                 int green = Byte.toUnsignedInt(pixels.get(offset + 1));
                 int blue = Byte.toUnsignedInt(pixels.get(offset + 2));
+                if (red + green + blue > 30) {
+                    coloredPixels++;
+                }
                 if (red > 40 && red > green * 1.5 && red > blue * 1.5) {
                     redPixels++;
                 }
@@ -128,6 +151,7 @@ public final class RenderingSmokeTest {
                 System.err.println(label + " projection: " + Arrays.toString(projection));
                 System.err.println(label + " read framebuffer: " + drawable.getContext().getDefaultReadFramebuffer()
                         + ", read buffer: 0x" + Integer.toHexString(readBuffer));
+                System.err.println(label + " nonblack pixels: " + coloredPixels);
                 throw new AssertionError(label + ": particle is invisible (" + redPixels + " red pixels)");
             }
             System.out.println(label + ": " + redPixels + " particle pixels");

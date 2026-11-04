@@ -105,7 +105,6 @@ public class GLPanel extends JPanel {
 	//Holds precision numbers (stacks/slices per sphere) depending on the size
 	private HashMap<Double,Point> precMap = new HashMap<Double,Point>();
 	
-	private double curZSize;
 
 	//The distance from the walls in 3D to the clipping planes
 	private double clipDistance = Units.convert("nm", "m", 0.1);
@@ -143,6 +142,37 @@ public class GLPanel extends JPanel {
         private DoubleBuffer toBuffer(double[] array){//perform myBuffer.flip() before using
             return Buffers.newDirectDoubleBuffer(array.length).put(array);}
         
+        /** 3D OpenGL uses nanometers; the established 1D/2D paths still use meters. */
+        private double renderLength(double meters) {
+            return simulationInfo.dimension == 3 ? meters * 1.0e9 : meters;
+        }
+
+        private void translate(double x, double y, double z) {
+            gl.glTranslated(renderLength(x), renderLength(y), renderLength(z));
+        }
+
+        private void vertex(double x, double y, double z) {
+            gl.glVertex3d(renderLength(x), renderLength(y), renderLength(z));
+        }
+
+        private void drawSphereSurface(double radius, int slices, int stacks) {
+            glu.gluSphere(sphere, renderLength(radius), slices, stacks);
+        }
+
+        private void drawCylinder(double base, double top, double height, int slices, int stacks) {
+            glu.gluCylinder(cylinder, renderLength(base), renderLength(top), renderLength(height), slices, stacks);
+        }
+
+        private void drawDisk(double inner, double outer, int slices, int loops) {
+            glu.gluDisk(disk, renderLength(inner), renderLength(outer), slices, loops);
+        }
+
+        private void clipPlane(int plane, double x, double y, double z, double distance) {
+            doubleBuffer = toBuffer(new double[] {x, y, z, renderLength(distance)});
+            doubleBuffer.flip();
+            gl.glClipPlane(plane, doubleBuffer);
+        }
+
 	/** 
 	 * Returns the # of stacks & slices that should be used to draw
 	 * a sphere of the given radius.
@@ -472,21 +502,21 @@ public class GLPanel extends JPanel {
 		if (traceMode) {
                     gl.glDisable(GL_LIGHTING);
                     gl.glBegin(GL_POINTS);
-                    gl.glVertex3d(x,y,z);
+                    vertex(x,y,z);
                     gl.glEnd();
                     gl.glEnable(GL_LIGHTING);
 		} else {
 
                     gl.glPushMatrix();
-                        gl.glTranslated(x, y, z);
-                        glu.gluSphere(sphere, (float)rad, prec.x, prec.y);
+                        translate(x, y, z);
+                        drawSphereSurface((float)rad, prec.x, prec.y);
 
                         //Draw an inside-out sphere in 3D periodic mode so you can
                         //see inside the spheres that cross the wall boundary.
                         if(simulationInfo.dimension == 3 && (simulationInfo.arenaType == ArenaType.PERIODIC_BOUNDARIES))
                         {
                                 glu.gluQuadricOrientation(sphere, GLU.GLU_INSIDE);
-                                glu.gluSphere(sphere, (float)rad, prec.x, prec.y);
+                                drawSphereSurface((float)rad, prec.x, prec.y);
                                 glu.gluQuadricOrientation(sphere, GLU.GLU_OUTSIDE);
                         }
                     gl.glPopMatrix();
@@ -500,7 +530,7 @@ public class GLPanel extends JPanel {
 		double w = simulationInfo.arenaXSize, h = simulationInfo.arenaYSize, d = simulationInfo.arenaZSize;
 		//double w2 = w / 2;
                 if (simulationInfo.dimension == 1) {
-                    gl.glTranslated(0.0, canvas.getHeight() / 2.0 * (simulationInfo.arenaXSize / canvas.getWidth()), 0.0);
+                    translate(0.0, canvas.getHeight() / 2.0 * (simulationInfo.arenaXSize / canvas.getWidth()), 0.0);
                 }
 		
 		if (currentFrame != null) {
@@ -567,15 +597,15 @@ public class GLPanel extends JPanel {
                     double relH = canvas.getHeight() * (simulationInfo.arenaXSize / canvas.getWidth());
 
                     gl.glPushMatrix();
-                        gl.glTranslated(pistonPos + SimulationInfo.PISTON_VALVE_RADIUS, relH, 0);
+                        translate(pistonPos + SimulationInfo.PISTON_VALVE_RADIUS, relH, 0);
                         gl.glRotatef(90,1.0f,0.0f, 0.0f);
-                        glu.gluCylinder(cylinder, (float)SimulationInfo.PISTON_VALVE_RADIUS, (float)SimulationInfo.PISTON_VALVE_RADIUS, (float)relH, prec.x, 1);
+                        drawCylinder((float)SimulationInfo.PISTON_VALVE_RADIUS, (float)SimulationInfo.PISTON_VALVE_RADIUS, (float)relH, prec.x, 1);
                     gl.glPopMatrix();
 
                     gl.glPushMatrix();
-                        gl.glTranslated(pistonPos + 2.0 * SimulationInfo.PISTON_VALVE_RADIUS , relH / 2.0, 0.0);
+                        translate(pistonPos + 2.0 * SimulationInfo.PISTON_VALVE_RADIUS , relH / 2.0, 0.0);
                         gl.glRotatef(90, 0.0f,1.0f, 0.0f);
-                        glu.gluCylinder(cylinder, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)(relW - pistonPos), prec.y, 1);
+                        drawCylinder((float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)(relW - pistonPos), prec.y, 1);
                     gl.glPopMatrix();
                     break;
 
@@ -585,32 +615,32 @@ public class GLPanel extends JPanel {
 
                     // draw the piston valve
                     gl.glPushMatrix();
-                        gl.glTranslated(0, pistonPos + SimulationInfo.PISTON_VALVE_RADIUS, 0);
+                        translate(0, pistonPos + SimulationInfo.PISTON_VALVE_RADIUS, 0);
                         gl.glRotatef(90, 0.0f, 1.0f, 0.0f);
-                        glu.gluCylinder(cylinder, (float)SimulationInfo.PISTON_VALVE_RADIUS, (float)SimulationInfo.PISTON_VALVE_RADIUS, (float)relW, prec.y, 1);
+                        drawCylinder((float)SimulationInfo.PISTON_VALVE_RADIUS, (float)SimulationInfo.PISTON_VALVE_RADIUS, (float)relW, prec.y, 1);
                     gl.glPopMatrix();
 
                     // draw the piston shaft
                     gl.glPushMatrix();
-                        gl.glTranslated(relW / 2.0, relH, 0);
+                        translate(relW / 2.0, relH, 0);
                         gl.glRotatef(90, 1.0f, 0.0f, 0.0f);
-                        glu.gluCylinder(cylinder, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)(relH - pistonPos - 2.0*SimulationInfo.PISTON_VALVE_RADIUS), prec.x, 1);
+                        drawCylinder((float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)(relH - pistonPos - 2.0*SimulationInfo.PISTON_VALVE_RADIUS), prec.x, 1);
                     gl.glPopMatrix();
                     break;
 
                 case 3:
                     gl.glPushMatrix();
-                        gl.glTranslated(w2,pistonPos+SimulationInfo.PISTON_VALVE_RADIUS,d2);
-                        gl.glScaled(w,2.0*SimulationInfo.PISTON_VALVE_RADIUS, d);
+                        translate(w2,pistonPos+SimulationInfo.PISTON_VALVE_RADIUS,d2);
+                        gl.glScaled(renderLength(w), renderLength(2.0 * SimulationInfo.PISTON_VALVE_RADIUS), renderLength(d));
                         colorComponents = left3DColor.getComponents(null);
                         gl.glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
                         glutSolidCube(1.0f);
                     gl.glPopMatrix();
 
                     gl.glPushMatrix();
-                        gl.glTranslated(w2, pistonPos + SimulationInfo.PISTON_VALVE_RADIUS , d2);
+                        translate(w2, pistonPos + SimulationInfo.PISTON_VALVE_RADIUS , d2);
                         gl.glRotatef(-90, 1.0f, 0.0f, 0.0f);
-                        glu.gluCylinder(cylinder, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)(h - pistonPos + SimulationInfo.PISTON_VALVE_RADIUS), prec.x, 1);
+                        drawCylinder((float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)SimulationInfo.PISTON_SHAFT_RADIUS, (float)(h - pistonPos + SimulationInfo.PISTON_VALVE_RADIUS), prec.x, 1);
                     gl.glPopMatrix();
             }
         }
@@ -629,10 +659,10 @@ public class GLPanel extends JPanel {
 	        for(int j=0;j<cuts;j++)
 	        {
 	            double x=x1+(sx1*i)+(sx2*j), y=y1+(sy1*i)+(sy2*j), z=z1+(sz1*i)+(sz2*j);
-                    gl.glVertex3d(x,y,z);
-                    gl.glVertex3d(x+sx1,y+sy1,z+sz1);
-                    gl.glVertex3d(x+sx1+sx2,y+sy1+sy2,z+sz1+sz2);
-                    gl.glVertex3d(x+sx2,y+sy2,z+sz2);
+                    vertex(x,y,z);
+                    vertex(x+sx1,y+sy1,z+sz1);
+                    vertex(x+sx1+sx2,y+sy1+sy2,z+sz1+sz2);
+                    vertex(x+sx2,y+sy2,z+sz2);
 	        }
 	    }
 	}
@@ -662,7 +692,7 @@ public class GLPanel extends JPanel {
                 double halfDepth = d / 2.0;
 
                 //Set the light position.
-                floatBuffer = toBuffer(new float[] { 0.0f, 0.0f, (float)(-camz + d), 1});
+                floatBuffer = toBuffer(new float[] { 0.0f, 0.0f, (float)renderLength(-camz + d), 1});
                 floatBuffer.flip();
                 gl.glLightfv(GL_LIGHT1, GL_POSITION, floatBuffer);
 
@@ -670,38 +700,23 @@ public class GLPanel extends JPanel {
                 // is identity, so translating by the negative eye position is
                 // exactly equivalent to lookAt. JOGL's float lookAt normalizes
                 // nanometer-scale vectors to zero and collapses the view matrix.
-                gl.glTranslated(-halfWidth, -halfHeight, -camz);
+                translate(-halfWidth, -halfHeight, -camz);
 
                 //Rotate the world to make it look like the camera moved.
-                gl.glTranslated(halfWidth,halfHeight,halfDepth);
+                translate(halfWidth,halfHeight,halfDepth);
                 gl.glRotated(camAngleY,0,1, 0);
                 double angle=camAngleY*Math.PI/180.0;
                 gl.glRotated(camAngleX,Math.cos(angle),0, Math.sin(angle));
-                gl.glTranslated(-halfWidth,-halfHeight,-halfDepth);
+                translate(-halfWidth,-halfHeight,-halfDepth);
 
-                //Set the clipping planes (applies to periodic boundaries).
-                doubleBuffer = toBuffer(new double[]{1,0,0,clipDistance});
-                doubleBuffer.flip();
-                gl.glClipPlane(GL_CLIP_PLANE0, doubleBuffer);
-                doubleBuffer = toBuffer(new double[]{0,1,0,clipDistance});
-                doubleBuffer.flip();
-                gl.glClipPlane(GL_CLIP_PLANE2, doubleBuffer);
-                doubleBuffer = toBuffer(new double[]{0,0,1,clipDistance});
-                doubleBuffer.flip();
-                gl.glClipPlane(GL_CLIP_PLANE4, doubleBuffer);
-                gl.glRotatef(180,0,1,0);
-                doubleBuffer = toBuffer(new double[]{1,0,0,w+clipDistance});
-                doubleBuffer.flip();
-                gl.glClipPlane(GL_CLIP_PLANE1, doubleBuffer);
-                doubleBuffer = toBuffer(new double[]{0,0,1,d+clipDistance});
-                doubleBuffer.flip();
-                gl.glClipPlane(GL_CLIP_PLANE5, doubleBuffer);
-                gl.glRotatef(-180,0,1,0);
-                gl.glRotatef(180,1,0,0);
-                doubleBuffer = toBuffer(new double[]{0,1,0,h+clipDistance});
-                doubleBuffer.flip();
-                gl.glClipPlane(GL_CLIP_PLANE3, doubleBuffer);
-                gl.glRotatef(-180,1,0,0);
+                // Define all half-spaces directly in rendering units. Keeping the
+                // modelview rotation unchanged also avoids roundoff from 180-degree turns.
+                clipPlane(GL_CLIP_PLANE0, 1, 0, 0, clipDistance);
+                clipPlane(GL_CLIP_PLANE1, -1, 0, 0, w + clipDistance);
+                clipPlane(GL_CLIP_PLANE2, 0, 1, 0, clipDistance);
+                clipPlane(GL_CLIP_PLANE3, 0, -1, 0, h + clipDistance);
+                clipPlane(GL_CLIP_PLANE4, 0, 0, 1, clipDistance);
+                clipPlane(GL_CLIP_PLANE5, 0, 0, -1, d + clipDistance);
 
                 //Disable the clipping planes until the walls are drawn.
                 gl.glDisable(GL_CLIP_PLANE0);
@@ -783,7 +798,7 @@ public class GLPanel extends JPanel {
                         double dr=SimulationInfo.ARENA_DIVIDER_RADIUS;
         		
         		//Divider (cube)
-                        //gl.glTranslated(halfWidth, halfHeight, halfDepth);
+                        //translate(halfWidth, halfHeight, halfDepth);
                         //gl.glScaled(SimulationInfo.ARENA_DIVIDER_RADIUS * 2.0, h, d);
                         //glutSolidCube(1.0f);
                         gl.glBegin(GL_QUADS);
@@ -792,15 +807,15 @@ public class GLPanel extends JPanel {
                         drawPlane(halfWidth+dr,h,0,halfWidth-dr,h,0,halfWidth-dr,h,d,halfWidth+dr,h,d,10);
                         drawPlane(halfWidth+dr,0,d,halfWidth-dr,0,d,halfWidth-dr,0,0,halfWidth+dr,0,0,10);
                         gl.glEnd();
-                        gl.glTranslated(halfWidth+SimulationInfo.ARENA_DIVIDER_RADIUS,halfHeight,halfDepth);
+                        translate(halfWidth+SimulationInfo.ARENA_DIVIDER_RADIUS,halfHeight,halfDepth);
                         gl.glRotatef(90,0,1,0);
                                 glu.gluQuadricOrientation(disk, GLU.GLU_OUTSIDE);
-                        glu.gluDisk(disk, 0.0f, (float)outerRadius, prec.x*2, prec.y);
+                        drawDisk(0.0f, (float)outerRadius, prec.x*2, prec.y);
                                 //Left Wall (with hole)
-                        gl.glTranslated(0,0,-2*SimulationInfo.ARENA_DIVIDER_RADIUS);
+                        translate(0,0,-2*SimulationInfo.ARENA_DIVIDER_RADIUS);
                                 glu.gluQuadricOrientation(disk, GLU.GLU_OUTSIDE);
                                 glu.gluQuadricOrientation(disk, GLU.GLU_INSIDE);
-                        glu.gluDisk(disk, 0.0f, (float)outerRadius, prec.x*2, prec.y);
+                        drawDisk(0.0f, (float)outerRadius, prec.x*2, prec.y);
         		
     			//Restore matrix state.
                         gl.glPopMatrix();
@@ -818,19 +833,19 @@ public class GLPanel extends JPanel {
                     gl.glEnd();
 
                     //Right Wall (with hole)
-                    gl.glTranslated(halfWidth+SimulationInfo.ARENA_DIVIDER_RADIUS,halfHeight,halfDepth);
+                    translate(halfWidth+SimulationInfo.ARENA_DIVIDER_RADIUS,halfHeight,halfDepth);
                     gl.glRotatef(90,0,1,0);
                             glu.gluQuadricOrientation(disk, GLU.GLU_OUTSIDE);
-                    glu.gluDisk(disk, (float)(simulationInfo.holeDiameter/2.0), (float)outerRadius, prec.x*2, prec.y);
+                    drawDisk((float)(simulationInfo.holeDiameter/2.0), (float)outerRadius, prec.x*2, prec.y);
 
                             //Left Wall (with hole)
-                    gl.glTranslated(0,0,-2*SimulationInfo.ARENA_DIVIDER_RADIUS);
+                    translate(0,0,-2*SimulationInfo.ARENA_DIVIDER_RADIUS);
                             glu.gluQuadricOrientation(disk, GLU.GLU_OUTSIDE);
                             glu.gluQuadricOrientation(disk, GLU.GLU_INSIDE);
-                    glu.gluDisk(disk, (float)(simulationInfo.holeDiameter/2.0), (float)outerRadius, prec.x*2, prec.y);
+                    drawDisk((float)(simulationInfo.holeDiameter/2.0), (float)outerRadius, prec.x*2, prec.y);
 
                         //Ring in Middle
-                    gl.glTranslated(0,0,SimulationInfo.ARENA_DIVIDER_RADIUS);
+                    translate(0,0,SimulationInfo.ARENA_DIVIDER_RADIUS);
                     
                     prec = getPrecision(simulationInfo.holeDiameter / 2.0 + SimulationInfo.ARENA_DIVIDER_RADIUS * 2.0);
                     
@@ -904,6 +919,8 @@ public class GLPanel extends JPanel {
 	 */
         private void glutSolidTorus(float innerRadius, float outerRadius, int nsides, int rings)
         {
+            innerRadius = (float) renderLength(innerRadius);
+            outerRadius = (float) renderLength(outerRadius);
 	    float ringDelta = 2.0f * (float) Math.PI / rings;
 	    float sideDelta = 2.0f * (float) Math.PI / nsides;
 	    float theta = 0.0f, cosTheta = 1.0f, sinTheta = 0.0f;
@@ -964,9 +981,9 @@ public class GLPanel extends JPanel {
                             gl.glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
                             Point prec=getPrecision(SimulationInfo.ARENA_DIVIDER_RADIUS);
                             gl.glPushMatrix();
-                                    gl.glTranslated(w2, h, 0);
+                                    translate(w2, h, 0);
                                     gl.glRotatef(90,1.0f,0.0f, 0.0f);
-                                    glu.gluCylinder(cylinder, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)h*2, prec.x, 1);
+                                    drawCylinder((float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)h*2, prec.x, 1);
                             gl.glPopMatrix();
 			} else if (simulationInfo.arenaType == ArenaType.DIVIDED_ARENA_WITH_HOLE &&
                                 simulationInfo.dimension > 1) {
@@ -976,22 +993,22 @@ public class GLPanel extends JPanel {
                             gl.glColor3f(colorComponents[0], colorComponents[1], colorComponents[2]);
                             Point prec=getPrecision(SimulationInfo.ARENA_DIVIDER_RADIUS);
                             gl.glPushMatrix();
-                                    gl.glTranslated(w2, h, 0);
+                                    translate(w2, h, 0);
                                     gl.glRotatef(90,1.0f,0.0f, 0.0f);
-                                    glu.gluCylinder(cylinder, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)((h-holeDiameter)/2-SimulationInfo.ARENA_DIVIDER_RADIUS), prec.x, 1);
+                                    drawCylinder((float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)((h-holeDiameter)/2-SimulationInfo.ARENA_DIVIDER_RADIUS), prec.x, 1);
                             gl.glPopMatrix();
                             gl.glPushMatrix();
-                                    gl.glTranslated(w2, ((h+holeDiameter)/2+SimulationInfo.ARENA_DIVIDER_RADIUS), 0);
-                                    glu.gluSphere(sphere, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, prec.x, prec.y);
+                                    translate(w2, ((h+holeDiameter)/2+SimulationInfo.ARENA_DIVIDER_RADIUS), 0);
+                                    drawSphereSurface((float)SimulationInfo.ARENA_DIVIDER_RADIUS, prec.x, prec.y);
                             gl.glPopMatrix();
                             gl.glPushMatrix();
-                                    gl.glTranslated(w2, ((h-holeDiameter)/2-SimulationInfo.ARENA_DIVIDER_RADIUS), 0);
+                                    translate(w2, ((h-holeDiameter)/2-SimulationInfo.ARENA_DIVIDER_RADIUS), 0);
                                     gl.glRotatef(90,1.0f,0.0f, 0.0f);
-                                    glu.gluCylinder(cylinder, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)((h-holeDiameter)/2-SimulationInfo.ARENA_DIVIDER_RADIUS), prec.x, 1);
+                                    drawCylinder((float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, (float)((h-holeDiameter)/2-SimulationInfo.ARENA_DIVIDER_RADIUS), prec.x, 1);
                             gl.glPopMatrix();
                             gl.glPushMatrix();
-                                    gl.glTranslated(w2, ((h-holeDiameter)/2-SimulationInfo.ARENA_DIVIDER_RADIUS), 0);
-                                    glu.gluSphere(sphere, (float)SimulationInfo.ARENA_DIVIDER_RADIUS, prec.x, prec.y);
+                                    translate(w2, ((h-holeDiameter)/2-SimulationInfo.ARENA_DIVIDER_RADIUS), 0);
+                                    drawSphereSurface((float)SimulationInfo.ARENA_DIVIDER_RADIUS, prec.x, prec.y);
                             gl.glPopMatrix();
 			}
 			
@@ -1021,9 +1038,6 @@ public class GLPanel extends JPanel {
 
                 if (simulationInfo.dimension != 3) {
                     gl.glScaled(1.0 / simulationInfo.arenaXSize, 1.0 / simulationInfo.arenaXSize, 1.0);
-                } else if (simulationInfo.dimension == 3) {
-                    double meterScale = Units.convert("m", "nm", 0.1);
-                    gl.glScaled(meterScale, meterScale, meterScale);
                 }
                 
 		//Update the point size.
@@ -1120,7 +1134,6 @@ public class GLPanel extends JPanel {
                 gl.glMatrixMode(GL_PROJECTION);
                 gl.glLoadIdentity();
 
-                curZSize = Units.convert("m", "nm", simulationInfo.arenaZSize);
                 double viewingAngle = 30.0;
                 double complementTangent = Math.tan(Math.PI * (90.0 - viewingAngle / 2.0) / 180.0);
                 camz = (simulationInfo.arenaYSize / 2.0) * complementTangent + simulationInfo.arenaZSize;
@@ -1137,7 +1150,15 @@ public class GLPanel extends JPanel {
                         gl.glOrtho(0, 1.0, 0, ySize / xSize, -200-simulationInfo.arenaZSize, 200);
                     }
                 } else {
-                    glu.gluPerspective((float)viewingAngle, (float)(simulationInfo.arenaXSize / simulationInfo.arenaYSize), 0.01F, (float)curZSize*30);
+                    // Geometry, camera and clipping distances now all use nanometers.
+                    // Build the frustum directly instead of multiplying a projection by 1e8.
+                    double extent = Math.sqrt(xSize * xSize + ySize * ySize
+                            + Math.pow(renderLength(simulationInfo.arenaZSize), 2));
+                    double near = Math.max(0.001, extent * 0.0001);
+                    double far = renderLength(camz) + extent;
+                    double top = near * Math.tan(Math.toRadians(viewingAngle / 2.0));
+                    double right = top * width / height;
+                    gl.glFrustum(-right, right, -top, top, near, far);
                 }
                 
                 // set readings on scale sidebars
