@@ -45,6 +45,7 @@ public final class ParticleControlsSmokeTest {
         typed(first, "particleMass", decimal("1.00794"));
         typed(first, "particleRadius", decimal("0.75"));
         typed(view, "particleTemperature", "425");
+        ((JButton) named(view, "setAllParticleTemperatures")).doClick();
         ((JButton) named(view, "addParticleType")).doClick();
         int typeCount = view.getTypeDescriptors().size();
         TypeDescriptorImpl added = (TypeDescriptorImpl) view.getTypeDescriptors().get(typeCount - 1);
