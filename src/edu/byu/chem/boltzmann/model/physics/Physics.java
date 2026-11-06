@@ -27,7 +27,11 @@ import edu.byu.chem.boltzmann.model.statistics.Pressure;
 import edu.byu.chem.boltzmann.model.statistics.RadialDistribution;
 import edu.byu.chem.boltzmann.model.statistics.interfaces.Statistic;
 import edu.byu.chem.boltzmann.model.statistics.interfaces.StatisticID;
+import edu.byu.chem.boltzmann.model.statistics.interfaces.StatisticWithDistribution;
+import edu.byu.chem.boltzmann.model.statistics.interfaces.Range;
+import edu.byu.chem.boltzmann.model.statistics.plots.HistogramBins;
 import edu.byu.chem.boltzmann.utils.Units;
+import edu.byu.chem.boltzmann.utils.Units.Unit;
 import edu.byu.chem.boltzmann.utils.Units.Time;
 import java.util.HashMap;
 import java.util.ArrayList;
@@ -409,12 +413,88 @@ public class Physics {
                     default: // all boundary events (Wall, Boundary, EOB, Barrier,
                                             // Edge)
                             Particle currentParticle = particles.get(event.part1);
+                            int conductingPartner = -1;
+                            double partnerNormalEnergy = 0.0;
+                            double partnerDirection = 0.0;
+                            if (event.colType == Collision.BARRIER
+                                    && simulationInfo.dividerThermalMode
+                                            == SimulationInfo.DividerThermalMode.CONDUCTING) {
+                                conductingPartner = findIncomingParticleOnOppositeSide(
+                                        event.part1, event.side, event.colTime);
+                                if (conductingPartner >= 0) {
+                                    Particle partner = particles.get(conductingPartner);
+                                    partnerNormalEnergy = normalKineticEnergy(partner);
+                                    partnerDirection = Math.signum(partner.getXVel());
+                                }
+                            }
                             currentParticle.boundaryCollide(event, piston, thermostat);
-                            calAction.colType = Collision.PARTICLE_1;
+                            if (conductingPartner >= 0) {
+                                Particle partner = particles.get(conductingPartner);
+                                double currentNormalEnergy = normalKineticEnergy(currentParticle);
+                                boolean currentOnLeft = event.side == Wall.LEFT;
+                                double currentDirection = currentOnLeft ? -1.0 : 1.0;
+                                double currentSpeed = Math.sqrt(
+                                        2.0 * partnerNormalEnergy / currentParticle.getMass());
+                                double partnerSpeed = Math.sqrt(
+                                        2.0 * currentNormalEnergy / partner.getMass());
+                                currentParticle.setXVel(currentDirection * currentSpeed);
+                                partner.setXVel(partnerDirection * partnerSpeed);
+
+                                // Both particles changed velocity, so refresh their collision
+                                // predictions together.
+                                calAction.part1 = event.part1;
+                                calAction.part2 = conductingPartner;
+                                calAction.colType = Collision.PARTICLE_2;
+                            } else {
+                                calAction.colType = Collision.PARTICLE_1;
+                            }
             }// end switch(event type)
 
 
             return calAction;
+    }
+
+    private int findIncomingParticleOnOppositeSide(int currentIndex, int currentSide, double time) {
+        boolean currentOnLeft = currentSide == Wall.LEFT;
+        double dividerCenterX = simulationInfo.arenaXSize / 2.0;
+        double dividerLeftX = dividerCenterX - SimulationInfo.ARENA_DIVIDER_RADIUS;
+        double dividerRightX = dividerCenterX + SimulationInfo.ARENA_DIVIDER_RADIUS;
+        int nearestIndex = -1;
+        double nearestGap = Double.POSITIVE_INFINITY;
+
+        for (int index = 0; index < particles.size(); index++) {
+            if (index == currentIndex) {
+                continue;
+            }
+
+            Particle candidate = particles.get(index);
+            candidate.moveToTime(time);
+            boolean candidateOnRight = candidate.getX() > dividerCenterX;
+            if (candidateOnRight != currentOnLeft) {
+                continue;
+            }
+
+            double velocity = candidate.getXVel();
+            boolean movingTowardDivider = currentOnLeft ? velocity < 0.0 : velocity > 0.0;
+            if (!movingTowardDivider) {
+                continue;
+            }
+
+            double gap = currentOnLeft
+                    ? candidate.getX() - candidate.getRadius() - dividerRightX
+                    : dividerLeftX - candidate.getRadius() - candidate.getX();
+            if (gap < nearestGap) {
+                nearestGap = gap;
+                nearestIndex = index;
+            }
+        }
+
+        return nearestIndex;
+    }
+
+    private double normalKineticEnergy(Particle particle) {
+        double normalVelocity = particle.getXVel();
+        return 0.5 * particle.getMass() * normalVelocity * normalVelocity;
     }
 
     /**
@@ -848,10 +928,60 @@ public class Physics {
         }
         
         setCorrectionsForStats(useFiniteSystemCorrections, useRealGasCorrections);
+        // Shared source bins keep a particle type's histogram identical across group selections.
+        alignHistogramBinRangesAcrossGroups();
         
         setPressureAveragingTime(statInfo.pressureAveragingTime);
         setRDFUpdateMultiplier(statInfo.rdfUpdateFreq);
         setExhaustiveRDFCalcs(statInfo.exhausiveRDFCalcs);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void alignHistogramBinRangesAcrossGroups() {
+        Map<StatisticID, Range> sharedRanges = new EnumMap<StatisticID, Range>(StatisticID.class);
+
+        for (Map<StatisticID, Statistic> statsByID : statistics.values()) {
+            for (Map.Entry<StatisticID, Statistic> entry : statsByID.entrySet()) {
+                if (!(entry.getValue() instanceof StatisticWithDistribution)) {
+                    continue;
+                }
+
+                StatisticWithDistribution distribution =
+                        (StatisticWithDistribution) entry.getValue();
+                Unit unit = distribution.getDefaultDisplayUnit();
+                Range range = distribution.getDistributionRange(unit);
+                if (!Double.isFinite(range.min) || !Double.isFinite(range.max)) {
+                    continue;
+                }
+                Range sharedRange = sharedRanges.get(entry.getKey());
+                if (sharedRange == null) {
+                    sharedRanges.put(entry.getKey(), range);
+                } else {
+                    sharedRanges.put(entry.getKey(), new Range(
+                            Math.min(sharedRange.min, range.min),
+                            Math.max(sharedRange.max, range.max)));
+                }
+            }
+        }
+
+        for (Map<StatisticID, Statistic> statsByID : statistics.values()) {
+            for (Map.Entry<StatisticID, Statistic> entry : statsByID.entrySet()) {
+                Range sharedRange = sharedRanges.get(entry.getKey());
+                if (sharedRange == null
+                        || !(entry.getValue() instanceof StatisticWithDistribution)) {
+                    continue;
+                }
+
+                StatisticWithDistribution distribution =
+                        (StatisticWithDistribution) entry.getValue();
+                Unit unit = distribution.getDefaultDisplayUnit();
+                Range binRange = Units.convert(unit, unit.getBaseUnit(), sharedRange);
+                HistogramBins currentBins = distribution.getHistogramBinsForCurrentDistribution();
+                HistogramBins cumulativeBins = distribution.getHistogramBinsForCumulativeDistribution();
+                currentBins.setDistributionRange(binRange);
+                cumulativeBins.setDistributionRange(binRange);
+            }
+        }
     }
 
     public void setFiniteSysCorrections(boolean corrections) {

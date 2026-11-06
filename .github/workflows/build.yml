@@ -58,11 +58,22 @@ jobs:
       - name: Package and verify the Mac app and DMG
         if: runner.os == 'macOS'
         shell: bash
-        run: ant -noinput package-verified 2>&1 | tee -a build.log
+        run: nice -n 10 ant -noinput package-verified 2>&1 | tee -a build.log
       - name: Package and verify the Windows app and installer
         if: runner.os == 'Windows'
-        shell: bash
-        run: ant -noinput package 2>&1 | tee -a build.log
+        shell: pwsh
+        run: |
+          $buildLog = Join-Path $env:GITHUB_WORKSPACE 'build.log'
+          $errorLog = Join-Path $env:GITHUB_WORKSPACE 'build.err'
+          $process = Start-Process -FilePath $env:ComSpec `
+            -ArgumentList @('/c', 'ant -noinput package') `
+            -PriorityClass BelowNormal -PassThru -Wait -NoNewWindow `
+            -RedirectStandardOutput $buildLog -RedirectStandardError $errorLog
+          if (Test-Path $errorLog) {
+            Get-Content $errorLog | Add-Content $buildLog
+          }
+          Get-Content $buildLog
+          if ($process.ExitCode -ne 0) { exit $process.ExitCode }
       - name: Verify Windows installation and uninstallation
         if: runner.os == 'Windows'
         shell: pwsh

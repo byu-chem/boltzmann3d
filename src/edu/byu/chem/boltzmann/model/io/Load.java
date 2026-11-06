@@ -41,6 +41,7 @@ import javax.swing.JOptionPane;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo.ArenaType;
 import edu.byu.chem.boltzmann.utils.Units.Energy;
+import edu.byu.chem.boltzmann.model.statistics.Formulas;
 import java.util.List;
 
 /** Contains methods for loading and reloading files. */
@@ -235,6 +236,16 @@ public class Load
                 }
 		
 		dummyMain.holeSize = (int) Math.round(gs.getDouble("hole_size"));
+
+		dummyMain.dividerThermalMode = SimulationInfo.DividerThermalMode.INSULATING;
+		if (gs.contains("divider_thermal_mode")) {
+			String mode = gs.getString("divider_thermal_mode").trim().toUpperCase(Locale.ROOT);
+			try {
+				dummyMain.dividerThermalMode = SimulationInfo.DividerThermalMode.valueOf(mode);
+			} catch (IllegalArgumentException invalidMode) {
+				throw new IOException("Unknown divider thermal mode: " + mode, invalidMode);
+			}
+		}
 		
 		dummyMain.pressAvgTime = gs.getDouble("pressure_averaging_time");
 
@@ -479,6 +490,7 @@ public class Load
                             particlePositions = bluePositions;
                             particleVelocities = blueVelocities;
                         }
+                        int firstVelocityInGroup = particleVelocities.size();
 			
 			// TODO: Implement a mechanism for randomly placed particles
 			// TODO: add code to "restart" by reloading the source file
@@ -613,6 +625,23 @@ public class Load
 //				dummyMain.rad[color] = dummyMain.rad[Const.BOTH] = rad;
 				
 			} // end for (Group p: pg.getGroups("Particle")) {
+
+                        if (pg.contains("temperature")) {
+                            double groupTemperature = pg.getDouble("temperature");
+                            if (!Double.isFinite(groupTemperature) || groupTemperature < 0.0
+                                    || groupTemperature > SimulationInfo.MAXIMUM_INITIAL_TEMPERATURE) {
+                                throw new IOException("Particle group temperature must be between 0 and "
+                                        + SimulationInfo.MAXIMUM_INITIAL_TEMPERATURE + " K");
+                            }
+                            ParticleType groupType = color == BLUE ? blueParticles : redParticles;
+                            scaleVelocitiesToTemperature(particleVelocities, firstVelocityInGroup,
+                                    groupType, groupTemperature, dummyMain.dimension);
+                            if (color == BLUE) {
+                                dummyMain.blueInitialTemperature = groupTemperature;
+                            } else {
+                                dummyMain.redInitialTemperature = groupTemperature;
+                            }
+                        }
 			
 			// TODO: finish this...
 		} // end for (Group pg : fg.getGroups("ParticleGroup")) {
@@ -943,5 +972,44 @@ public class Load
         //Convert to joules from AMU * m^2 / s^2
         totalKE = Units.convert(Energy.AMU_JOULE, Energy.JOULE, totalKE);
         return totalKE;
+    }
+
+    private static void scaleVelocitiesToTemperature(List<double[]> velocities, int firstIndex,
+            ParticleType type, double temperature, int dimension) {
+        int count = velocities.size() - firstIndex;
+        if (count == 0) return;
+
+        List<double[]> groupVelocities = velocities.subList(firstIndex, velocities.size());
+        double targetEnergy = Formulas.avgKineticEnergy(temperature, dimension) * count;
+        double currentEnergy = calculateTotalKE(type, groupVelocities);
+        if (currentEnergy > 0.0) {
+            double factor = Math.sqrt(targetEnergy / currentEnergy);
+            for (double[] velocity : groupVelocities) {
+                for (int axis = 0; axis < velocity.length; axis++) {
+                    velocity[axis] *= factor;
+                }
+            }
+        } else if (targetEnergy > 0.0) {
+            double speed = Formulas.speed(Formulas.avgKineticEnergy(temperature, dimension),
+                    Units.convert("amu", "kg", type.particleMass));
+            for (double[] velocity : groupVelocities) {
+                double theta = Math.random() * 2.0 * Math.PI;
+                double phi = Math.acos(1.0 - 2.0 * Math.random());
+                if (dimension == 1) {
+                    velocity[0] = Math.cos(theta) < 0.0 ? -speed : speed;
+                } else if (dimension == 2) {
+                    velocity[0] = Math.cos(theta) * speed;
+                    velocity[1] = Math.sin(theta) * speed;
+                } else {
+                    velocity[0] = Math.sin(phi) * Math.cos(theta) * speed;
+                    velocity[1] = Math.sin(phi) * Math.sin(theta) * speed;
+                    velocity[2] = Math.cos(phi) * speed;
+                }
+            }
+        } else {
+            for (double[] velocity : groupVelocities) {
+                java.util.Arrays.fill(velocity, 0.0);
+            }
+        }
     }
 }

@@ -66,7 +66,7 @@ public class Pressure implements SingleAverageStatistic<PressureUnit> {
         Map<ParticleType, Double> pressureByType = new HashMap<ParticleType, Double>(typesRecorded.size());
         for(ParticleType type: typesRecorded)
             pressureByType.put(type, Formulas.pressure(simInfo.getNumberOfParticles(type),
-                simInfo.initialTemperature, Formulas.effectiveVolume(simInfo, type)));
+                simInfo.getInitialTemperature(type), Formulas.effectiveVolume(simInfo, type)));
 //        for(ParticleType type: typesRecorded){
 //            double pressureInDefaultUnits = Formulas.pressure(simInfo.getNumberOfParticles(type),
 //                simInfo.initialTemperature, Formulas.effectiveVolume(simInfo, type));

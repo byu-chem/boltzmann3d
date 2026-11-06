@@ -28,6 +28,7 @@ import edu.byu.chem.boltzmann.modules.sharedcomponents.dimensionselector.Dimensi
 import edu.byu.chem.boltzmann.utils.Units.Length;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo.ArenaType;
+import edu.byu.chem.boltzmann.utils.data.SimulationInfo.DividerThermalMode;
 import edu.byu.chem.boltzmann.view.maingui.components.textfields.UnitTextField;
 import edu.byu.chem.boltzmann.view.utils.events.BoltzmannListenerHandler;
 import java.awt.Dimension;
@@ -54,6 +55,11 @@ public class FullArenaTypeSettings extends javax.swing.JPanel implements ArenaTy
                     listeners.notifyListeners(new ArenaTypeChangedEvent(newSelectedValue));
                 }         
             });
+
+    private final javax.swing.JPanel dividerThermalPanel =
+            new javax.swing.JPanel(new FlowLayout(FlowLayout.LEFT));
+    private final javax.swing.JComboBox<DividerThermalMode> dividerThermalMode =
+            new javax.swing.JComboBox<DividerThermalMode>(DividerThermalMode.values());
     
     private ArenaTypeChangedListener dividedHoleDiameterInputEnabler = 
             new ArenaTypeChangedListener() {
@@ -69,6 +75,9 @@ public class FullArenaTypeSettings extends javax.swing.JPanel implements ArenaTy
         holeDiameter.setEnabled(optionsEnabled);
         lblHoleDiameter.setEnabled(optionsEnabled);
         chkBoxMaxwellDemonMode.setEnabled(optionsEnabled);
+        boolean hasDivider = btnGrpArenaType.getSelectedValue() == ArenaType.DIVIDED_ARENA
+                || btnGrpArenaType.getSelectedValue() == ArenaType.DIVIDED_ARENA_WITH_HOLE;
+        dividerThermalPanel.setVisible(hasDivider);
     }
     
     private ArenaSizeSettings sizeSettings = null;
@@ -132,6 +141,12 @@ public class FullArenaTypeSettings extends javax.swing.JPanel implements ArenaTy
                 
         pnlDividedHoleSize.add(holeDiameter);
         addListener(dividedHoleDiameterInputEnabler);
+        dividerThermalMode.setName("dividerThermalMode");
+        dividerThermalPanel.add(new javax.swing.JLabel("Divider heat transfer:"));
+        dividerThermalPanel.add(dividerThermalMode);
+        dividerThermalPanel.setVisible(false);
+        add(dividerThermalPanel, 5);
+        btnGrpArenaType.setSelectedValue(ArenaType.REFLECTING_BOUNDARIES);
     }
 
     /** This method is called from within the constructor to
@@ -276,6 +291,14 @@ public class FullArenaTypeSettings extends javax.swing.JPanel implements ArenaTy
 
     public ArenaType getType() {
         return btnGrpArenaType.getSelectedValue();
+    }
+
+    public void setDividerThermalMode(DividerThermalMode mode) {
+        dividerThermalMode.setSelectedItem(mode == null ? DividerThermalMode.INSULATING : mode);
+    }
+
+    public DividerThermalMode getDividerThermalMode() {
+        return (DividerThermalMode) dividerThermalMode.getSelectedItem();
     }
     
     public void setArenaSizeSettings(ArenaSizeSettings sizeSettings,

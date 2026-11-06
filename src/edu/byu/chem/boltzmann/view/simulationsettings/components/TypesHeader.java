@@ -26,6 +26,10 @@ public class TypesHeader extends javax.swing.JPanel {
 
     public TypesHeader() {
         initComponents();
+        javax.swing.JLabel lblTemperature = new javax.swing.JLabel("Initial Temp (K)");
+        lblTemperature.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
+        lblTemperature.setPreferredSize(new java.awt.Dimension(90, 16));
+        add(lblTemperature, 5);
         setAlignmentX(LEFT_ALIGNMENT);
         setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, 32));
     }
@@ -91,6 +95,10 @@ public class TypesHeader extends javax.swing.JPanel {
     
     protected int getMassWidth() {
         return lblMass.getPreferredSize().width;
+    }
+
+    protected int getTemperatureWidth() {
+        return 90;
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables

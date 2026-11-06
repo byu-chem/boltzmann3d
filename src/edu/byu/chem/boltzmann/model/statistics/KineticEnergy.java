@@ -108,14 +108,14 @@ public class KineticEnergy implements StatisticWithDistribution<Energy> {
                 if (finiteCorrections && simInfo.isPeriodic()) {
                     return Formulas.correctedKE(
                                 Units.convert("amu", "kg", type.particleMass),
-                                simInfo.initialTemperature,
+                                simInfo.getInitialTemperature(type),
                                 simInfo.dimension,
                                 simInfo.totalNumParticles,
                                 Units.convert("amu", "kg", simInfo.totalMassOfParticles)
                                 );
                 } else {
                     return Formulas.avgKineticEnergy(
-                                simInfo.initialTemperature, 
+                                simInfo.getInitialTemperature(type), 
                                 simInfo.dimension);
                 }
             }
@@ -136,14 +136,14 @@ public class KineticEnergy implements StatisticWithDistribution<Energy> {
                 if (finiteCorrections && simInfo.isPeriodic()) {
                     return Formulas.correctedKE(
                                 Units.convert("amu", "kg", type.particleMass),
-                                simInfo.initialTemperature,
+                                simInfo.getInitialTemperature(type),
                                 simInfo.dimension,
                                 simInfo.totalNumParticles,
                                 Units.convert("amu", "kg", simInfo.totalMassOfParticles)
                                 );
                 } else {
                     return Formulas.avgKineticEnergy(
-                                simInfo.initialTemperature, 
+                                simInfo.getInitialTemperature(type), 
                                 simInfo.dimension);
                 }
             }
@@ -154,14 +154,14 @@ public class KineticEnergy implements StatisticWithDistribution<Energy> {
             public double valueForType(ParticleType type) {
                 if (finiteCorrections) {
                     return Formulas.correctedKEWidth(
-                            simInfo.initialTemperature,
+                            simInfo.getInitialTemperature(type),
                             Units.convert("amu", "kg", type.particleMass), 
                             simInfo.dimension,
                             simInfo.isPeriodic(),
                             simInfo.totalNumParticles,
                             Units.convert("amu", "kg", simInfo.totalMassOfParticles));
                 } else {
-                    return Formulas.KEWidth(simInfo.initialTemperature,
+                    return Formulas.KEWidth(simInfo.getInitialTemperature(type),
                     Units.convert("amu", "kg", type.particleMass), simInfo.dimension);
                 }
             }
@@ -181,7 +181,7 @@ public class KineticEnergy implements StatisticWithDistribution<Energy> {
                     simulationInfo.totalInitialKE);
         } else {
             return kinEnergyDistribution(x, 
-                    simulationInfo.initialTemperature,
+                    simulationInfo.getInitialTemperature(particleType),
                     simulationInfo.dimension);
         }
     }

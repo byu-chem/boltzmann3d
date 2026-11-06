@@ -7,6 +7,7 @@ GlobalSettings {
   hole_size 8
   pressure_averaging_time 60
   boundary DIVIDED
+  divider_thermal_mode INSULATING
   color_scheme DARK
   forget_time 4
   lighting TRUE
@@ -130,6 +131,7 @@ ParticleGroup {
   color Red
   radius 0.7
   mass 2
+  temperature 500
 
   Particle {
     position  2.212 19.301 0
@@ -316,6 +318,7 @@ ParticleGroup {
   color Blue
   radius 0.7
   mass 2
+  temperature 300
 
   Particle {
     position  53.21 46.882 0

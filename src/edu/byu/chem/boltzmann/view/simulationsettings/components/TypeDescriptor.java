@@ -29,5 +29,10 @@ public interface TypeDescriptor {
     public ParticleType getTypeDescribed();
     
     public int getNumParticles();
+
+    /** Initial temperature in Kelvin, or NaN when the view uses its global value. */
+    default double getInitialTemperature() {
+        return Double.NaN;
+    }
     
 }

@@ -32,6 +32,9 @@ import javax.swing.JColorChooser;
 public class TypeDescriptorImpl extends javax.swing.JPanel implements TypeDescriptor {
 
     final private SimSettingsFullView mainFrame;
+    private final javax.swing.JSpinner spnrTemperature = new javax.swing.JSpinner(
+            new javax.swing.SpinnerNumberModel(300.0, 0.0,
+                    (double) edu.byu.chem.boltzmann.utils.data.SimulationInfo.MAXIMUM_INITIAL_TEMPERATURE, 10.0));
 
     public TypeDescriptorImpl(TypesHeader header, String typeName, SimSettingsFullView mainFrame) {
         this.mainFrame = mainFrame;
@@ -81,6 +84,10 @@ public class TypeDescriptorImpl extends javax.swing.JPanel implements TypeDescri
         spnrRadius.setModel(new javax.swing.SpinnerNumberModel(1.0, 0.001, 1.0e6, 0.1));
         spnrMass.setEditor(new javax.swing.JSpinner.NumberEditor(spnrMass, "0.########"));
         spnrRadius.setEditor(new javax.swing.JSpinner.NumberEditor(spnrRadius, "0.########"));
+        spnrTemperature.setName("particleGroupTemperature");
+        spnrTemperature.setEditor(new javax.swing.JSpinner.NumberEditor(spnrTemperature, "0.########"));
+        spnrTemperature.setPreferredSize(new Dimension(90, 28));
+        add(spnrTemperature, 5);
         setAlignmentX(LEFT_ALIGNMENT);
         setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
     }
@@ -90,10 +97,17 @@ public class TypeDescriptorImpl extends javax.swing.JPanel implements TypeDescri
         spnrNumParticles.commitEdit();
         spnrMass.commitEdit();
         spnrRadius.commitEdit();
+        spnrTemperature.commitEdit();
         double mass = ((Number) spnrMass.getValue()).doubleValue();
         double radius = ((Number) spnrRadius.getValue()).doubleValue();
+        double temperature = getInitialTemperature();
         if (!Double.isFinite(mass) || mass <= 0 || !Double.isFinite(radius) || radius <= 0) {
             throw new java.text.ParseException("Mass and radius must be finite positive numbers.", 0);
+        }
+        if (!Double.isFinite(temperature) || temperature < 0
+                || temperature > edu.byu.chem.boltzmann.utils.data.SimulationInfo.MAXIMUM_INITIAL_TEMPERATURE) {
+            throw new java.text.ParseException("Particle group temperature must be finite and between 0 and "
+                    + edu.byu.chem.boltzmann.utils.data.SimulationInfo.MAXIMUM_INITIAL_TEMPERATURE + " K.", 0);
         }
     }
 
@@ -103,18 +117,21 @@ public class TypeDescriptorImpl extends javax.swing.JPanel implements TypeDescri
         Dimension sizePartSpnr = spnrNumParticles.getPreferredSize();
         Dimension sizeRadiusSpnr = spnrRadius.getPreferredSize();
         Dimension sizeMassSpnr = spnrMass.getPreferredSize();
+        Dimension sizeTemperatureSpnr = spnrTemperature.getPreferredSize();
 
         sizeTxtFld.setSize(header.getNameWidth(), sizeTxtFld.height);
         sizeColorBtn.setSize(header.getColorWidth(), sizeColorBtn.height);
         sizePartSpnr.setSize(header.getNumPartWidth(), sizePartSpnr.height);
         sizeRadiusSpnr.setSize(header.getRadiusWidth(), sizeRadiusSpnr.height);
         sizeMassSpnr.setSize(header.getMassWidth(), sizeMassSpnr.height);
+        sizeTemperatureSpnr.setSize(header.getTemperatureWidth(), sizeTemperatureSpnr.height);
 
         txtFldName.setPreferredSize(sizeTxtFld);
         btnColor.setPreferredSize(sizeColorBtn);
         spnrNumParticles.setPreferredSize(sizePartSpnr);
         spnrRadius.setPreferredSize(sizeRadiusSpnr);
         spnrMass.setPreferredSize(sizeMassSpnr);
+        spnrTemperature.setPreferredSize(sizeTemperatureSpnr);
     }
 
     /** This method is called from within the constructor to
@@ -226,6 +243,16 @@ protected Color getTypeColor() {
 
 public int getNumParticles() {
     return (Integer) spnrNumParticles.getValue();
+}
+
+@Override
+public double getInitialTemperature() {
+    return ((Number) spnrTemperature.getValue()).doubleValue();
+}
+
+public void setInitialTemperature(double temperature) {
+    spnrTemperature.setValue(Math.max(0.0, Math.min(
+            edu.byu.chem.boltzmann.utils.data.SimulationInfo.MAXIMUM_INITIAL_TEMPERATURE, temperature)));
 }
 
 protected double getTypeRadius() {

@@ -308,6 +308,7 @@ public class Save
 		else if (main.simulationInfo.arenaType == ArenaType.MOVABLE_PISTON)
 			boundString = "PISTON";
 		gs.set("boundary", boundString);
+		gs.set("divider_thermal_mode", main.simulationInfo.dividerThermalMode.name());
 
 		if (main.simulationInfo.arenaType == ArenaType.MOVABLE_PISTON)
 		{

@@ -3,7 +3,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 module.exports = async ({ github, context, core }) => {
-  const config = JSON.parse(fs.readFileSync('.github/releases/3.0.json', 'utf8'));
+  const configPath = process.env.RELEASE_CONFIG || '.github/releases/3.0.json';
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   const repo = context.repo;
   const { data: source } = await github.rest.actions.getWorkflowRun({ ...repo, run_id: config.source_run });
   if (source.head_sha !== config.source_commit || source.conclusion !== 'success') {

@@ -140,14 +140,14 @@ public class RMSVelocity implements StatisticWithDistribution<Velocity> {
             public double valueForType(ParticleType type) {
                 if (finiteCorrections) {
                     return Formulas.correctedVelocityWidth(
-                            simInfo.initialTemperature,
+                            simInfo.getInitialTemperature(type),
                             Units.convert("amu", "kg", type.particleMass), 
                             simInfo.dimension,
                             simInfo.isPeriodic(),
                             simInfo.totalNumParticles,
                             Units.convert("amu", "kg", simInfo.totalMassOfParticles));
                 } else {
-                    return Formulas.velocityWidth(simInfo.initialTemperature,
+                    return Formulas.velocityWidth(simInfo.getInitialTemperature(type),
                     Units.convert("amu", "kg", type.particleMass), simInfo.dimension);
                 }
             }
@@ -160,7 +160,7 @@ public class RMSVelocity implements StatisticWithDistribution<Velocity> {
         if (useFiniteSystemCorrections) {
             return InstantaneousSpeed.correctedVelDistribution(x,
                     Units.convert("amu", "kg", particleType.particleMass),
-                    simInfo.initialTemperature,
+                    simInfo.getInitialTemperature(particleType),
                     simInfo.dimension,
                     simInfo.isPeriodic(),
                     simInfo.totalNumParticles,
@@ -170,20 +170,20 @@ public class RMSVelocity implements StatisticWithDistribution<Velocity> {
         } else {
             return InstantaneousSpeed.velocityDistribution(x,
                     Units.convert("amu", "kg", particleType.particleMass),
-                    simInfo.initialTemperature,
+                    simInfo.getInitialTemperature(particleType),
                     simInfo.dimension);
         }
     }
 
     protected static double predictAvgForType(SimulationInfo simInfo, ParticleType type) {
-        double avgSpeedForType = Formulas.rmsVelocity(simInfo.initialTemperature,
+        double avgSpeedForType = Formulas.rmsVelocity(simInfo.getInitialTemperature(type),
                 Units.convert("amu", "kg", type.particleMass), simInfo.dimension);
         return avgSpeedForType;
     }
 
     protected static double predictAvgWithCorrections(SimulationInfo simInfo, ParticleType type) {
         double avgSpeedForType = Formulas.correctedRMSVel(
-                simInfo.initialTemperature,
+                simInfo.getInitialTemperature(type),
                 Units.convert("amu", "kg", type.particleMass), 
                 simInfo.dimension,
                 simInfo.isPeriodic());

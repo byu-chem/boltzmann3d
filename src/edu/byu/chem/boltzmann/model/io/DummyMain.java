@@ -20,6 +20,7 @@ package edu.byu.chem.boltzmann.model.io;
 import edu.byu.chem.boltzmann.utils.Units;
 import edu.byu.chem.boltzmann.utils.data.ParticleType;
 import edu.byu.chem.boltzmann.utils.data.ReactionRelationship;
+import edu.byu.chem.boltzmann.utils.data.SimulationInfo;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo.ArenaType;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo.WallEnum;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfoSupplier;
@@ -61,7 +62,11 @@ public class DummyMain implements SimulationInfoSupplier {
     public List<double[]> bluePositions;
     public List<double[]> redVelocities;
     public List<double[]> blueVelocities;
+    public double redInitialTemperature = Double.NaN;
+    public double blueInitialTemperature = Double.NaN;
     public ArenaType arenaType;
+    public SimulationInfo.DividerThermalMode dividerThermalMode =
+            SimulationInfo.DividerThermalMode.INSULATING;
     
     public int tracePointSize;
     public Color red;
@@ -83,6 +88,11 @@ public class DummyMain implements SimulationInfoSupplier {
 
     public ArenaType getArenaType() {
         return arenaType;
+    }
+
+    @Override
+    public SimulationInfo.DividerThermalMode getDividerThermalMode() {
+        return dividerThermalMode;
     }
 
     public int getDimension() {
@@ -153,6 +163,15 @@ public class DummyMain implements SimulationInfoSupplier {
                 particles = bluePositions.size();
         }
         return particles;
+    }
+
+    @Override
+    public double getParticleInitialTemperature(int index) {
+        if (index == 0) {
+            return redPositions != null && !redPositions.isEmpty()
+                    ? redInitialTemperature : blueInitialTemperature;
+        }
+        return blueInitialTemperature;
     }
 
     public double[] getParticlePosition(int particleTypeIndex, int particleIndex) {

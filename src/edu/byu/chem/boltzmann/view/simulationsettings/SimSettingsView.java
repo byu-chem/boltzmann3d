@@ -36,6 +36,10 @@ public interface SimSettingsView {
 
     public ArenaType getArenaType();
 
+    default SimulationInfo.DividerThermalMode getDividerThermalMode() {
+        return SimulationInfo.DividerThermalMode.INSULATING;
+    }
+
     public int getDimension();
 
     public double getArenaXSize();

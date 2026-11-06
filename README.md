@@ -150,11 +150,16 @@ Original contact: Derek Manwaring, manwaringsandals@gmail.com.
 
 Use **Particles & temperature…** above the statistics panel to open the particle
 settings directly. Each row edits a particle type's name, color, count, radius in
-nanometers and mass in atomic mass units. **Add particle type** adds a row; the
-minus button removes it. The initial temperature in kelvin applies to all types.
+nanometers, mass in atomic mass units and initial temperature in kelvin. The top
+temperature control sets all groups at once; individual row values can then be
+adjusted. **Add particle type** adds a row; the minus button removes it.
 **Apply** restarts the simulation with the new initial conditions. Requests that
 exceed the arena capacity show an error so that counts are not silently reduced.
-The Arena tab still controls dimensions, arena size and boundary conditions.
+The Arena tab controls dimensions, arena size, boundary conditions, and divider
+heat transfer. An insulating divider reflects particles without transferring
+energy through its surface. A conducting divider exchanges normal kinetic energy
+between particles approaching it from opposite sides. An open hole still lets
+particles cross between compartments.
 
 `ant test` checks typed particle edits, decimal masses, temperature, capacity
 validation and settings/physics round trips through 2D and 3D in US and German
@@ -163,7 +168,11 @@ rejects a particle that fills the 2D framebuffer.
 
 ### Original preset simulations
 
-File → Preset simulations provides the 27 original `.set` files, grouped into 2D and 3D examples. These were recovered unchanged from the original Boltzmann.app distribution (V2.43–V2.48 settings). The current startup default remains separate; “Original default” opens the older saved example.
+File → Preset simulations provides the 27 original `.set` simulations, grouped into 2D and 3D examples. They are based on files recovered from the original Boltzmann.app distribution (V2.43–V2.48 settings). The current startup default remains separate; “Original default” opens the older saved example.
+
+The 2D “Hot and cold” preset initializes red particles at 500 K and blue
+particles at 300 K. The preset stores those temperatures alongside each
+particle group; they are also used when restarting from the particle controls.
 
 Presets are embedded in the application JAR and also shipped as ordinary files in `presets/` beside the JAR (on macOS, inside `Boltzmann3D.app/Contents/app/`). Use File → Load to open an edited copy.
 

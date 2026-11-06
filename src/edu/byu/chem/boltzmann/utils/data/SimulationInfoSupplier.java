@@ -30,6 +30,11 @@ import java.util.Set;
 public interface SimulationInfoSupplier {
 
     public ArenaType getArenaType();
+
+    default SimulationInfo.DividerThermalMode getDividerThermalMode() {
+        return SimulationInfo.DividerThermalMode.INSULATING;
+    }
+
     public int getDimension();
 
     /**
@@ -78,6 +83,14 @@ public interface SimulationInfoSupplier {
      * @return The number of particles of type <code>getParticleType(index)</code>
      */
     public int getNumberOfParticles(int index);
+
+    /**
+     * @return Initial temperature in Kelvin for the particle group at index, or
+     * {@link Double#NaN} if it should be inferred from the supplied velocities.
+     */
+    default double getParticleInitialTemperature(int index) {
+        return Double.NaN;
+    }
 
     /**
      * For retrieving coordinates for a certain particle's position

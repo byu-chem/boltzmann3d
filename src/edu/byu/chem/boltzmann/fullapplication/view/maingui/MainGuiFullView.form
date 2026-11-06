@@ -213,7 +213,7 @@
                 <Container class="javax.swing.JPanel" name="pnlPlotSelector">
                   <Properties>
                     <Property name="preferredSize" type="java.awt.Dimension" editor="org.netbeans.beaninfo.editors.DimensionEditor">
-                      <Dimension value="[266, 30]"/>
+                      <Dimension value="[390, 30]"/>
                     </Property>
                   </Properties>
 
@@ -225,7 +225,9 @@
                               <Component id="jLabel4" min="-2" max="-2" attributes="0"/>
                               <EmptySpace min="5" pref="5" max="5" attributes="0"/>
                               <Component id="cmbBoxPlots" min="-2" max="-2" attributes="0"/>
-                              <EmptySpace min="-2" pref="184" max="-2" attributes="0"/>
+                              <EmptySpace min="8" pref="8" max="8" attributes="0"/>
+                              <Component id="chkBoxFreezeHistogramAxis" min="-2" max="-2" attributes="0"/>
+                              <EmptySpace min="5" pref="5" max="5" attributes="0"/>
                           </Group>
                       </Group>
                     </DimensionLayout>
@@ -240,6 +242,10 @@
                                   <Group type="102" alignment="0" attributes="0">
                                       <EmptySpace min="4" pref="4" max="4" attributes="0"/>
                                       <Component id="cmbBoxPlots" min="-2" max="-2" attributes="0"/>
+                                  </Group>
+                                  <Group type="102" alignment="0" attributes="0">
+                                      <EmptySpace min="4" pref="4" max="4" attributes="0"/>
+                                      <Component id="chkBoxFreezeHistogramAxis" min="-2" max="-2" attributes="0"/>
                                   </Group>
                               </Group>
                               <EmptySpace min="-2" pref="25" max="-2" attributes="0"/>
@@ -263,6 +269,14 @@
                       </Properties>
                       <Events>
                         <EventHandler event="actionPerformed" listener="java.awt.event.ActionListener" parameters="java.awt.event.ActionEvent" handler="cmbBoxPlotsActionPerformed"/>
+                      </Events>
+                    </Component>
+                    <Component class="javax.swing.JCheckBox" name="chkBoxFreezeHistogramAxis">
+                      <Properties>
+                        <Property name="text" type="java.lang.String" value="Freeze x-axis"/>
+                      </Properties>
+                      <Events>
+                        <EventHandler event="actionPerformed" listener="java.awt.event.ActionListener" parameters="java.awt.event.ActionEvent" handler="chkBoxFreezeHistogramAxisActionPerformed"/>
                       </Events>
                     </Component>
                   </SubComponents>
@@ -337,6 +351,33 @@
               </Properties>
               <Events>
                 <EventHandler event="actionPerformed" listener="java.awt.event.ActionListener" parameters="java.awt.event.ActionEvent" handler="chkBoxHistoryActionPerformed"/>
+              </Events>
+            </Component>
+          </SubComponents>
+        </Container>
+        <Container class="javax.swing.JPanel" name="pnlTemperatureReadout">
+          <Layout class="org.netbeans.modules.form.compat2.layouts.DesignFlowLayout">
+            <Property name="alignment" type="int" value="0"/>
+            <Property name="horizontalGap" type="int" value="4"/>
+            <Property name="verticalGap" type="int" value="3"/>
+          </Layout>
+          <SubComponents>
+            <Component class="javax.swing.JLabel" name="lblTemperature">
+              <Properties>
+                <Property name="text" type="java.lang.String" value="Temp:"/>
+              </Properties>
+            </Component>
+            <Component class="javax.swing.JTextField" name="txtFldCurrentTemperature">
+              <Properties>
+                <Property name="columns" type="int" value="8"/>
+                <Property name="editable" type="boolean" value="false"/>
+                <Property name="horizontalAlignment" type="int" value="4"/>
+                <Property name="text" type="java.lang.String" value="—"/>
+              </Properties>
+            </Component>
+            <Component class="javax.swing.JComboBox" name="cmbBoxTemperatureTypes">
+              <Events>
+                <EventHandler event="actionPerformed" listener="java.awt.event.ActionListener" parameters="java.awt.event.ActionEvent" handler="cmbBoxTemperatureTypesActionPerformed"/>
               </Events>
             </Component>
           </SubComponents>

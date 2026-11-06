@@ -294,10 +294,14 @@ public class SimSettingsController implements SimulationInfoSupplier {
 
     private void assignRandomVelocities() {
         particleVelocities = new double[particleTypes.length][][];
-        double initialTemperature = view.getInitialTemperature();
 
         for (int typeIndex = 0; typeIndex < particleTypes.length; typeIndex++) {
             particleVelocities[typeIndex] = new double[numberOfParticles[typeIndex]][];
+            TypeDescriptor descriptor = typeMap.get(particleTypes[typeIndex]);
+            double initialTemperature = descriptor.getInitialTemperature();
+            if (!Double.isFinite(initialTemperature) || initialTemperature < 0.0) {
+                initialTemperature = view.getInitialTemperature();
+            }
             double energy = Formulas.avgKineticEnergy(initialTemperature, dimension);
             double speed = Formulas.speed(energy, Units.convert("amu", "kg", particleTypes[typeIndex].particleMass));
 
@@ -332,6 +336,11 @@ public class SimSettingsController implements SimulationInfoSupplier {
 
     public ArenaType getArenaType() {
         return arenaType;
+    }
+
+    @Override
+    public SimulationInfo.DividerThermalMode getDividerThermalMode() {
+        return view.getDividerThermalMode();
     }
 
     public int getDimension() {
@@ -369,6 +378,14 @@ public class SimSettingsController implements SimulationInfoSupplier {
 
     public int getNumberOfParticles(int index) {
         return numberOfParticles[index];
+    }
+
+    @Override
+    public double getParticleInitialTemperature(int index) {
+        TypeDescriptor descriptor = typeMap.get(particleTypes[index]);
+        double temperature = descriptor.getInitialTemperature();
+        return Double.isFinite(temperature) && temperature >= 0.0
+                ? temperature : view.getInitialTemperature();
     }
 
     public double[] getParticlePosition(int particleTypeIndex, int particleIndex) {

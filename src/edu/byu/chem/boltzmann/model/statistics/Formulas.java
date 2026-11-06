@@ -435,8 +435,12 @@ public class Formulas {
         double effectiveVolume = effectiveVolume(simInfo, collisionType);
         double type1Mass = Units.convert("amu", "kg", type.particleMass);
         double type2Mass = Units.convert("amu", "kg", collisionType.particleMass);
+        double reducedMass = (type1Mass * type2Mass) / (type1Mass + type2Mass);
+        double relativeTemperature = reducedMass * (
+                simInfo.getInitialTemperature(type) / type1Mass
+                + simInfo.getInitialTemperature(collisionType) / type2Mass);
         double avgRelativeVelocity = avgRelativeVelocity(
-                simInfo.initialTemperature, 
+                relativeTemperature,
                 type1Mass, 
                 type2Mass, 
                 simInfo.dimension);

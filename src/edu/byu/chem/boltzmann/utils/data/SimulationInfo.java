@@ -79,6 +79,22 @@ public class SimulationInfo {
         MOVABLE_PISTON
     }
 
+    public enum DividerThermalMode {
+        INSULATING("Insulating"),
+        CONDUCTING("Conducting");
+
+        private final String label;
+
+        DividerThermalMode(String label) {
+            this.label = label;
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
     public static final double ARENA_DIVIDER_RADIUS = Units.convert("nm", "m", 1.0);
     public static final double PISTON_SHAFT_RADIUS = Units.convert("nm", "m", 1.0);
     public static final double PISTON_VALVE_RADIUS = Units.convert("nm", "m", 2.0);
@@ -95,6 +111,7 @@ public class SimulationInfo {
 
     //Current arena/wall setup
     public final ArenaType arenaType;
+    public final DividerThermalMode dividerThermalMode;
     public final int dimension;
     //Arena sizes in meters. Set to -1.0 if not applicable in the current dimension
     public final double arenaXSize, arenaYSize, arenaZSize;
@@ -112,6 +129,7 @@ public class SimulationInfo {
     private final Map<ParticleType, List<double[]>> particlePositions;
     //x, y, z compontents in meters/second of velocity vector
     private final Map<ParticleType, List<double[]>> particleVelocities;
+    private final Map<ParticleType, Double> particleInitialTemperatures;
     
     public final int totalNumParticles;
     public final double totalInitialKE;
@@ -161,8 +179,10 @@ public class SimulationInfo {
         holeDiameter = 0;
         maxwellDemonMode = false;
         this.arenaType = null;
+        this.dividerThermalMode = DividerThermalMode.INSULATING;
         this.particlePositions = null;
         this.particleVelocities = null;
+        this.particleInitialTemperatures = Collections.emptyMap();
         this.reactionMode = false;
         this.reactionRelationships = null;
         this.attractiveParticleInteractions = false;
@@ -192,6 +212,9 @@ public class SimulationInfo {
     public SimulationInfo(SimulationInfoSupplier infoSource){
         //Get info about the arena
         this.arenaType = infoSource.getArenaType();
+        DividerThermalMode suppliedDividerMode = infoSource.getDividerThermalMode();
+        this.dividerThermalMode = suppliedDividerMode == null
+                ? DividerThermalMode.INSULATING : suppliedDividerMode;
         //Get the hole size if there is a hole
         if (arenaType == ArenaType.DIVIDED_ARENA_WITH_HOLE) {
             this.holeDiameter = infoSource.getHoleDiameter();
@@ -225,6 +248,7 @@ public class SimulationInfo {
         this.particleTypes = new ParticleType[numberOfParticleTypes];
         this.particlePositions = new HashMap<ParticleType, List<double[]>>(numberOfParticleTypes);
         this.particleVelocities = new HashMap<ParticleType, List<double[]>>(numberOfParticleTypes);
+        Map<ParticleType, Double> initialTemperatures = new HashMap<ParticleType, Double>(numberOfParticleTypes);
 
         //Loop through the different particle types adding their characteristics
         //and lists of the particles of that type to the maps created
@@ -247,7 +271,18 @@ public class SimulationInfo {
             //Add completed particle lists to the maps
             particlePositions.put(thisType, positions);
             particleVelocities.put(thisType, velocities);
+
+            double suppliedTemperature = infoSource.getParticleInitialTemperature(typeIndex);
+            double inferredTemperature = velocities.isEmpty() ? Double.NaN
+                    : Formulas.temperature(Load.calculateTotalKE(thisType, velocities) / velocities.size(), dimension);
+            double typeTemperature = Double.isFinite(suppliedTemperature) && suppliedTemperature >= 0.0
+                    ? suppliedTemperature : inferredTemperature;
+            if (!Double.isFinite(typeTemperature) || typeTemperature < 0.0) {
+                typeTemperature = 300.0;
+            }
+            initialTemperatures.put(thisType, typeTemperature);
         }
+        this.particleInitialTemperatures = Collections.unmodifiableMap(initialTemperatures);
 
         // Calculate what the initial temperature is
         double totalKE = 0.0;
@@ -413,6 +448,12 @@ public class SimulationInfo {
 
     public synchronized double getHeatReservoirTemperature() {
         return heatReservoirTemperature;
+    }
+
+    /** Returns the initial temperature assigned to one particle group. */
+    public double getInitialTemperature(ParticleType type) {
+        Double temperature = particleInitialTemperatures.get(type);
+        return temperature == null ? initialTemperature : temperature;
     }
 
     public synchronized void setHeatReservoirTemperature(double heatReservoirTemperature) {

@@ -147,6 +147,7 @@ public abstract class Particle {
 	public abstract double getY();
 	public abstract double getZ();
         public abstract double getXVel();
+        public abstract void setXVel(double velocity);
         public abstract double getYVel();
         public abstract double getZVel();
 

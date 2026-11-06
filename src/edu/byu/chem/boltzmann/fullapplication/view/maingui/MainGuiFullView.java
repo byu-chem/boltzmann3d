@@ -17,6 +17,7 @@
  */
 package edu.byu.chem.boltzmann.fullapplication.view.maingui;
 
+import edu.byu.chem.boltzmann.controller.ErrorHandler;
 import edu.byu.chem.boltzmann.model.physics.FrameInfo;
 import edu.byu.chem.boltzmann.model.physics.PartState;
 import edu.byu.chem.boltzmann.model.statistics.Formulas;
@@ -26,6 +27,7 @@ import edu.byu.chem.boltzmann.model.statistics.interfaces.Statistic;
 import edu.byu.chem.boltzmann.model.statistics.interfaces.SingleAverageStatistic;
 import edu.byu.chem.boltzmann.model.statistics.interfaces.StatisticWithDistribution;
 import edu.byu.chem.boltzmann.model.statistics.interfaces.StatisticID;
+import edu.byu.chem.boltzmann.model.statistics.interfaces.Range;
 import edu.byu.chem.boltzmann.model.statistics.plots.PlotUtils.PlotType;
 import edu.byu.chem.boltzmann.resources.ResourceLoader;
 import edu.byu.chem.boltzmann.utils.Units;
@@ -88,7 +90,12 @@ public class MainGuiFullView extends
 
     final private StatPanel plotPanel;
 
+    private Range frozenHistogramRange;
+    private StatisticID frozenHistogramStatistic;
+    private boolean updatingPlotComboForTypeChange;
+
     public static final String CMB_BOX_NONE = "None";
+    private static final String ALL_PARTICLE_TYPES = "All particles";
 
     private MainGuiController controller;
     
@@ -184,6 +191,7 @@ public class MainGuiFullView extends
         pnlPlotSelector = new javax.swing.JPanel();
         jLabel4 = new javax.swing.JLabel();
         cmbBoxPlots = new javax.swing.JComboBox();
+        chkBoxFreezeHistogramAxis = new javax.swing.JCheckBox();
         pnlPlotHolder = new javax.swing.JPanel();
         pnlPlotReadouts = new javax.swing.JPanel();
         pnlSeparator2 = new javax.swing.JPanel();
@@ -193,6 +201,10 @@ public class MainGuiFullView extends
         chkBoxCumulative = new javax.swing.JCheckBox();
         chkBoxWidth = new javax.swing.JCheckBox();
         chkBoxHistory = new javax.swing.JCheckBox();
+        pnlTemperatureReadout = new javax.swing.JPanel();
+        lblTemperature = new javax.swing.JLabel();
+        txtFldCurrentTemperature = new javax.swing.JTextField();
+        cmbBoxTemperatureTypes = new javax.swing.JComboBox();
 
         mnuBtnChangePlotLimits.setText("Change Plot Limits");
         mnuBtnChangePlotLimits.addActionListener(new java.awt.event.ActionListener() {
@@ -272,7 +284,7 @@ public class MainGuiFullView extends
         pnlPlotHeader.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 10, 0, 0));
         pnlPlotHeader.setLayout(new javax.swing.BoxLayout(pnlPlotHeader, javax.swing.BoxLayout.PAGE_AXIS));
 
-        pnlPlotSelector.setPreferredSize(new java.awt.Dimension(266, 30));
+        pnlPlotSelector.setPreferredSize(new java.awt.Dimension(390, 30));
 
         jLabel4.setText("Plot:");
 
@@ -280,6 +292,13 @@ public class MainGuiFullView extends
         cmbBoxPlots.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 cmbBoxPlotsActionPerformed(evt);
+            }
+        });
+
+        chkBoxFreezeHistogramAxis.setText("Freeze x-axis");
+        chkBoxFreezeHistogramAxis.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                chkBoxFreezeHistogramAxisActionPerformed(evt);
             }
         });
 
@@ -292,7 +311,9 @@ public class MainGuiFullView extends
                 .add(jLabel4)
                 .add(5, 5, 5)
                 .add(cmbBoxPlots, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
-                .add(184, 184, 184))
+                .add(8, 8, 8)
+                .add(chkBoxFreezeHistogramAxis)
+                .add(5, 5, 5))
         );
         pnlPlotSelectorLayout.setVerticalGroup(
             pnlPlotSelectorLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
@@ -303,7 +324,10 @@ public class MainGuiFullView extends
                         .add(jLabel4))
                     .add(pnlPlotSelectorLayout.createSequentialGroup()
                         .add(4, 4, 4)
-                        .add(cmbBoxPlots, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
+                        .add(cmbBoxPlots, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                    .add(pnlPlotSelectorLayout.createSequentialGroup()
+                        .add(4, 4, 4)
+                        .add(chkBoxFreezeHistogramAxis)))
                 .add(25, 25, 25))
         );
 
@@ -348,6 +372,25 @@ public class MainGuiFullView extends
 
         pnlStats.add(pnlStatOptions);
 
+        pnlTemperatureReadout.setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 3));
+        lblTemperature.setText("Temp:");
+        pnlTemperatureReadout.add(lblTemperature);
+
+        txtFldCurrentTemperature.setEditable(false);
+        txtFldCurrentTemperature.setColumns(8);
+        txtFldCurrentTemperature.setHorizontalAlignment(javax.swing.JTextField.RIGHT);
+        txtFldCurrentTemperature.setText("—");
+        pnlTemperatureReadout.add(txtFldCurrentTemperature);
+
+        cmbBoxTemperatureTypes.setPreferredSize(new java.awt.Dimension(100, 24));
+        cmbBoxTemperatureTypes.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                cmbBoxTemperatureTypesActionPerformed(evt);
+            }
+        });
+        pnlTemperatureReadout.add(cmbBoxTemperatureTypes);
+        pnlStats.add(pnlTemperatureReadout);
+
         org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(this);
         this.setLayout(layout);
         layout.setHorizontalGroup(
@@ -383,8 +426,15 @@ public class MainGuiFullView extends
     private void cmbBoxTypesActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_cmbBoxTypesActionPerformed
         Object selectedItem = cmbBoxTypes.getSelectedItem();
         if (selectedItem == null || selectedItem.equals(CMB_BOX_NONE)) {
-            cmbBoxPlots.removeAllItems();
-            cmbBoxPlots.addItem(CMB_BOX_NONE);
+            updatingPlotComboForTypeChange = true;
+            try {
+                cmbBoxPlots.removeAllItems();
+                cmbBoxPlots.addItem(CMB_BOX_NONE);
+            } finally {
+                updatingPlotComboForTypeChange = false;
+            }
+            decidePlotType();
+            updateFrozenHistogramRange();
             return;
         }
 
@@ -400,37 +450,58 @@ public class MainGuiFullView extends
             ((javax.swing.JPanel) readout).setVisible(false);
         }
 
-        if (Set.class.isInstance(selectedItem)) { //It might be the string that says "None"
-            populatePlotsCombo(selectedTypes);
-            for (StatisticID statisticID: simulationInfo.getStatistics(selectedTypes)) {
-                StatisticReadout readout = statisticReadouts.get(statisticID);
-                if (readout != null) {
-                    ((javax.swing.JPanel) readout).setVisible(true);
+        updatingPlotComboForTypeChange = true;
+        try {
+            if (Set.class.isInstance(selectedItem)) { //It might be the string that says "None"
+                populatePlotsCombo(selectedTypes);
+                for (StatisticID statisticID: simulationInfo.getStatistics(selectedTypes)) {
+                    StatisticReadout readout = statisticReadouts.get(statisticID);
+                    if (readout != null) {
+                        ((javax.swing.JPanel) readout).setVisible(true);
+                    }
                 }
             }
-        }
 
-        //Before setting the selected plot so it will be unselected if unavailable
-        chkBoxHistory.setSelected(wasHist);
-        if (lastSelectedStat != null) {
-            if (simulationInfo.getStatistics(selectedTypes).contains(lastSelectedStat)) {
-                cmbBoxPlots.setSelectedItem(controller.getStatistic(selectedTypes, lastSelectedStat));
+            //Before setting the selected plot so it will be unselected if unavailable
+            chkBoxHistory.setSelected(wasHist);
+            if (lastSelectedStat != null) {
+                if (simulationInfo.getStatistics(selectedTypes).contains(lastSelectedStat)) {
+                    cmbBoxPlots.setSelectedItem(lastSelectedStat);
+                }
+            } else if (cmbBoxPlots.getItemCount() > 1) { //At least one plot is available so show it
+                cmbBoxPlots.setSelectedIndex(0);
+            } else {
+                cmbBoxPlots.setSelectedItem(CMB_BOX_NONE);
             }
-        } else if (cmbBoxPlots.getItemCount() > 1) { //At least one plot is available so show it
-            cmbBoxPlots.setSelectedIndex(0);
-        } else {
-            cmbBoxPlots.setSelectedItem(CMB_BOX_NONE);
+        } finally {
+            updatingPlotComboForTypeChange = false;
         }
         setupPlotOptions();
 }//GEN-LAST:event_cmbBoxTypesActionPerformed
 
     private void cmbBoxPlotsActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_cmbBoxPlotsActionPerformed
-        setupPlotOptions();
+        if (!updatingPlotComboForTypeChange) {
+            setupPlotOptions();
+        }
 }//GEN-LAST:event_cmbBoxPlotsActionPerformed
 
     private void chkBoxHistoryActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_chkBoxHistoryActionPerformed
         decidePlotType();
+        updateFrozenHistogramRange();
 }//GEN-LAST:event_chkBoxHistoryActionPerformed
+
+    private void chkBoxFreezeHistogramAxisActionPerformed(java.awt.event.ActionEvent evt) {
+        frozenHistogramRange = null;
+        frozenHistogramStatistic = null;
+        updateFrozenHistogramRange();
+        if (plotPanel != null) {
+            plotPanel.repaint();
+        }
+    }
+
+    private void cmbBoxTemperatureTypesActionPerformed(java.awt.event.ActionEvent evt) {
+        updateCurrentTemperatureReadout();
+    }
 
     private void mnuBtnChangePlotLimitsActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_mnuBtnChangePlotLimitsActionPerformed
         StatisticID currentStat = getSelectedStatistic();
@@ -457,10 +528,14 @@ public class MainGuiFullView extends
     @Override
     public void setSimulationInfo(SimulationInfo simulationInfo) {
         this.simulationInfo = simulationInfo;
+        currentFrame = null;
+        frozenHistogramRange = null;
+        frozenHistogramStatistic = null;
 
         glPanel.setSimulationInfo(simulationInfo);
 
         initiateTypesBox();
+        populateTemperatureTypes();
         
         setupDefaultColorers();
 
@@ -625,11 +700,13 @@ public class MainGuiFullView extends
     public void displayFrame() {
         glPanel.drawFrame();
         
-        final double frameEndTime = currentFrame.endTime;
+        final FrameInfo frameToDisplay = currentFrame;
+        final double frameEndTime = frameToDisplay.endTime;
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {
                 txtFldSimTime.setValue(frameEndTime, Time.SECOND);
+                updateCurrentTemperatureReadout(frameToDisplay);
             }
         });
     }
@@ -639,6 +716,9 @@ public class MainGuiFullView extends
         StatisticID selectedStat = getSelectedStatistic();
 
         Set<ParticleType> selectedTypes = getSelectedTypes();
+
+        updateFrozenHistogramRange();
+        updateCurrentTemperatureReadout();
 
         plotPanel.updateHistories();
 
@@ -656,6 +736,48 @@ public class MainGuiFullView extends
         plotPanel.repaint();
         
         validate();
+    }
+
+    private void populateTemperatureTypes() {
+        cmbBoxTemperatureTypes.removeAllItems();
+        cmbBoxTemperatureTypes.addItem(ALL_PARTICLE_TYPES);
+        for (ParticleType particleType : simulationInfo.getParticleTypes()) {
+            cmbBoxTemperatureTypes.addItem(particleType);
+        }
+        cmbBoxTemperatureTypes.setSelectedIndex(0);
+        updateCurrentTemperatureReadout();
+    }
+
+    private void updateCurrentTemperatureReadout() {
+        updateCurrentTemperatureReadout(currentFrame);
+    }
+
+    private void updateCurrentTemperatureReadout(FrameInfo frame) {
+        if (frame == null || simulationInfo.dimension <= 0) {
+            txtFldCurrentTemperature.setText("—");
+            return;
+        }
+
+        Object selection = cmbBoxTemperatureTypes.getSelectedItem();
+        ParticleType selectedType = selection instanceof ParticleType
+                ? (ParticleType) selection : null;
+        double totalKineticEnergy = 0.0;
+        int particleCount = 0;
+
+        for (PartState state : frame.getParticleStates().values()) {
+            if (selectedType == null || state.particleType == selectedType) {
+                totalKineticEnergy += Formulas.kineticEnergy(state);
+                particleCount++;
+            }
+        }
+
+        if (particleCount == 0) {
+            txtFldCurrentTemperature.setText("—");
+        } else {
+            double temperature = Formulas.temperature(
+                    totalKineticEnergy / particleCount, simulationInfo.dimension);
+            txtFldCurrentTemperature.setText(ErrorHandler.format(temperature, 4) + " K");
+        }
     }
 
     @SuppressWarnings({"unchecked"})
@@ -710,6 +832,58 @@ public class MainGuiFullView extends
 
             decidePlotType();
         }
+        updateFrozenHistogramRange();
+    }
+
+    private void updateFrozenHistogramRange() {
+        StatisticID selectedStat = getSelectedStatistic();
+        Set<ParticleType> selectedTypes = getSelectedTypes();
+        boolean canFreezeAxis = currentPlotType == PlotType.HISTOGRAM
+                && selectedStat != null
+                && selectedStat.implementsInterface(StatisticWithDistribution.class)
+                && selectedTypes != null;
+
+        chkBoxFreezeHistogramAxis.setEnabled(canFreezeAxis);
+        if (!canFreezeAxis || !chkBoxFreezeHistogramAxis.isSelected()) {
+            frozenHistogramRange = null;
+            frozenHistogramStatistic = null;
+        } else if (frozenHistogramRange == null || frozenHistogramStatistic != selectedStat) {
+            frozenHistogramRange = getSharedHistogramRange(selectedStat, selectedTypes);
+            frozenHistogramStatistic = selectedStat;
+        }
+
+        if (plotPanel != null) {
+            plotPanel.setFrozenHistogramRange(frozenHistogramRange);
+        }
+    }
+
+    private Range getSharedHistogramRange(StatisticID statisticID,
+            Set<ParticleType> selectedTypes) {
+        double minimum = Double.POSITIVE_INFINITY;
+        double maximum = Double.NEGATIVE_INFINITY;
+        Set<ParticleType> allTypes = new HashSet<ParticleType>(simulationInfo.getParticleTypes());
+
+        for (Set<ParticleType> particleTypes : Formulas.getAllCombinations(allTypes)) {
+            if (!simulationInfo.getStatistics(particleTypes).contains(statisticID)) {
+                continue;
+            }
+
+            StatisticWithDistribution statistic = (StatisticWithDistribution)
+                    controller.getStatistic(particleTypes, statisticID);
+            Range range = statistic.getDistributionRange(statistic.getDefaultDisplayUnit());
+            if (Double.isFinite(range.min) && Double.isFinite(range.max)) {
+                minimum = Math.min(minimum, range.min);
+                maximum = Math.max(maximum, range.max);
+            }
+        }
+
+        if (!Double.isFinite(minimum) || !Double.isFinite(maximum)) {
+            StatisticWithDistribution selectedStatistic = (StatisticWithDistribution)
+                    controller.getStatistic(selectedTypes, statisticID);
+            return selectedStatistic.getDistributionRange(selectedStatistic.getDefaultDisplayUnit());
+        }
+
+        return new Range(minimum, maximum);
     }
 
     private void decidePlotType() {
@@ -795,12 +969,15 @@ public class MainGuiFullView extends
     private javax.swing.JButton btnRestart;
     private javax.swing.JCheckBox chkBoxCumulative;
     private javax.swing.JCheckBox chkBoxHistory;
+    private javax.swing.JCheckBox chkBoxFreezeHistogramAxis;
     private javax.swing.JCheckBox chkBoxWidth;
     private javax.swing.JComboBox cmbBoxPlots;
+    private javax.swing.JComboBox cmbBoxTemperatureTypes;
     private javax.swing.JComboBox cmbBoxTypes;
     private javax.swing.JLabel jLabel2;
     private javax.swing.JLabel jLabel3;
     private javax.swing.JLabel jLabel4;
+    private javax.swing.JLabel lblTemperature;
     private javax.swing.JSeparator jSeparator4;
     private javax.swing.JSeparator jSeparator5;
     private javax.swing.JToggleButton jToggleButton1;
@@ -819,5 +996,7 @@ public class MainGuiFullView extends
     private javax.swing.JPanel pnlStatHeader;
     private javax.swing.JPanel pnlStatOptions;
     private javax.swing.JPanel pnlStats;
+    private javax.swing.JPanel pnlTemperatureReadout;
+    private javax.swing.JTextField txtFldCurrentTemperature;
     // End of variables declaration//GEN-END:variables
 }

@@ -18,7 +18,7 @@
 package edu.byu.chem.boltzmann.view.maingui.components.statistics;
 
 import edu.byu.chem.boltzmann.controller.ErrorHandler;
-import edu.byu.chem.boltzmann.model.statistics.StatUtils;
+import edu.byu.chem.boltzmann.model.statistics.InstantaneousSpeed;
 import edu.byu.chem.boltzmann.model.statistics.interfaces.Range;
 import edu.byu.chem.boltzmann.model.statistics.interfaces.Statistic;
 import edu.byu.chem.boltzmann.model.statistics.interfaces.SingleAverageStatistic;
@@ -30,6 +30,7 @@ import edu.byu.chem.boltzmann.model.statistics.plots.PlotUtils.PlotType;
 import edu.byu.chem.boltzmann.utils.Units.Unit;
 import javax.swing.*;
 import java.awt.*;
+import java.text.NumberFormat;
 import javax.swing.border.*;
 import java.awt.image.BufferedImage;
 import java.util.HashMap;
@@ -56,6 +57,7 @@ public class StatPanel extends JPanel {
     private PlotType currentType = PlotType.HISTOGRAM;
     private Statistic currentStatistic = null;
     private boolean cumulativeAverage = false; //Plotting instantaneous / cumulative data
+    private Range frozenHistogramRange;
     
     //used by redrawPredictionCurve() and reused to scale lines in drawHistogramAvgAndWidthLines()
     private int[] predCurveYValues;
@@ -148,6 +150,7 @@ public class StatPanel extends JPanel {
                     widthPrediction = 0;
                 distanceToMax = Math.max(widthPrediction, averagePrediction);
                 predictionCurves.put(statisticWithDist, null);
+                predictionCurveRanges.remove(statisticWithDist);
             } else {
                 distanceToMax = 0.5 * averagePrediction;
             }
@@ -162,12 +165,18 @@ public class StatPanel extends JPanel {
     }
 
     private final Map<StatisticWithDistribution, BufferedImage> predictionCurves = new HashMap<StatisticWithDistribution, BufferedImage>();
+    private final Map<StatisticWithDistribution, Range> predictionCurveRanges =
+            new HashMap<StatisticWithDistribution, Range>();
     
     @SuppressWarnings("unchecked")
     private void drawHistogram(Graphics g, StatisticWithDistribution statisticWithDistribution) {
         Unit statisticUnit = statisticWithDistribution.getDefaultDisplayUnit();        
         Range distributionRange = statisticWithDistribution.getDistributionRange(statisticUnit);        
         Dimension size = getSize();
+        Range requestedRange = frozenHistogramRange == null ? distributionRange : frozenHistogramRange;
+        double majorTickInterval = calculateNiceTickInterval(
+                requestedRange.getDistanceFromMinToMax(), size.width - (2 * StatPanel.edge));
+        Range displayedRange = expandToNiceTickBounds(requestedRange, majorTickInterval);
 
         HistogramBins bins;
         if (cumulativeAverage) {
@@ -175,25 +184,36 @@ public class StatPanel extends JPanel {
         } else {
             bins = statisticWithDistribution.getHistogramBinsForCurrentDistribution();
         }
-        bins.drawHistogramBars(size, g);
+        bins.drawHistogramBars(size, g, displayedRange);
         
-        drawHistogramLines(size, g, distributionRange);
+        drawHistogramLines(size, g, displayedRange, majorTickInterval);
 
-        overlayPredictionCurve(g, statisticWithDistribution);
+        overlayPredictionCurve(g, statisticWithDistribution, displayedRange);
         
-        drawHistogramAvgAndWidthLines(g, statisticWithDistribution, distributionRange, statisticUnit);
+        drawHistogramAvgAndWidthLines(g, statisticWithDistribution, displayedRange, statisticUnit);
+        if (statisticWithDistribution instanceof InstantaneousSpeed) {
+            drawVelocityRmsLines(g, statisticWithDistribution, displayedRange, statisticUnit);
+            drawVelocityMarkerLegend(g);
+        }
     }
 
-    private void redrawPredictionCurve(StatisticWithDistribution statisticWithDistribution) {
+    private void redrawPredictionCurve(StatisticWithDistribution statisticWithDistribution,
+            Range displayedRange) {
         int width = getSize().width - (2 * StatPanel.edge);
         int bottomY = getSize().height - StatPanel.bottomBuffer - StatPanel.edge;
         int height = bottomY - StatPanel.topEdge;
+        int curveHeight = (int) Math.round(height * 0.8);
         
         BufferedImage predictionCurve = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         Graphics g = predictionCurve.createGraphics();
 
+        Unit statisticUnit = statisticWithDistribution.getDefaultDisplayUnit();
+        Range sourceRange = statisticWithDistribution.getDistributionRange(statisticUnit);
         double[] unscaledPoints = statisticWithDistribution.getPredictionCurve(width);
-        predCurveYValues = PlotUtils.scalePoints(unscaledPoints, height);
+        if (!rangesMatch(sourceRange, displayedRange)) {
+            unscaledPoints = resampleCurve(unscaledPoints, sourceRange, displayedRange);
+        }
+        predCurveYValues = PlotUtils.scalePoints(unscaledPoints, curveHeight);
 
         PlotUtils.reversePoints(predCurveYValues, height);
 
@@ -206,6 +226,42 @@ public class StatPanel extends JPanel {
         g.drawPolyline(xValues, predCurveYValues, xValues.length);
         
         predictionCurves.put(statisticWithDistribution, predictionCurve);
+        predictionCurveRanges.put(statisticWithDistribution, displayedRange);
+    }
+
+    private static double[] resampleCurve(double[] sourcePoints, Range sourceRange,
+            Range displayedRange) {
+        double[] displayedPoints = new double[sourcePoints.length];
+        double sourceSpan = sourceRange.getDistanceFromMinToMax();
+        double displayedSpan = displayedRange.getDistanceFromMinToMax();
+        if (sourcePoints.length == 0 || !(sourceSpan > 0.0) || !(displayedSpan > 0.0)) {
+            return displayedPoints;
+        }
+
+        for (int index = 0; index < displayedPoints.length; index++) {
+            double value = displayedRange.min
+                    + displayedSpan * (index + 0.5) / displayedPoints.length;
+            if (value < sourceRange.min || value > sourceRange.max) {
+                continue;
+            }
+
+            double sourcePosition = (value - sourceRange.min) / sourceSpan
+                    * sourcePoints.length - 0.5;
+            sourcePosition = Math.max(0.0, Math.min(sourcePoints.length - 1.0, sourcePosition));
+            int lowerIndex = (int) Math.floor(sourcePosition);
+            int upperIndex = Math.min(sourcePoints.length - 1, lowerIndex + 1);
+            double fraction = sourcePosition - lowerIndex;
+            displayedPoints[index] = sourcePoints[lowerIndex] * (1.0 - fraction)
+                    + sourcePoints[upperIndex] * fraction;
+        }
+
+        return displayedPoints;
+    }
+
+    private static boolean rangesMatch(Range first, Range second) {
+        return first != null && second != null
+                && Double.compare(first.min, second.min) == 0
+                && Double.compare(first.max, second.max) == 0;
     }
 
     @SuppressWarnings("unchecked")
@@ -220,72 +276,208 @@ public class StatPanel extends JPanel {
         double rangeToPixelScaleFactor = predCurveYValues.length / range.getDistanceFromMinToMax();
         int bottomY = getSize().height - StatPanel.bottomBuffer - StatPanel.edge;
         
-        drawHistogramAvgOrWidthLine(g, range, predictedAverage, actualAverage, rangeToPixelScaleFactor, bottomY);
-        drawHistogramAvgOrWidthLine(g, range, predictedAverage - predictedWidth, actualAverage - actualWidth, rangeToPixelScaleFactor, bottomY);
-        drawHistogramAvgOrWidthLine(g, range, predictedAverage + predictedWidth, actualAverage + actualWidth, rangeToPixelScaleFactor, bottomY);
+        drawHistogramAvgOrWidthLine(g, range, predictedAverage, actualAverage, rangeToPixelScaleFactor, bottomY, 3, true);
+        drawHistogramAvgOrWidthLine(g, range, predictedAverage - predictedWidth, actualAverage - actualWidth, rangeToPixelScaleFactor, bottomY, 1, true);
+        drawHistogramAvgOrWidthLine(g, range, predictedAverage + predictedWidth, actualAverage + actualWidth, rangeToPixelScaleFactor, bottomY, 1, true);
     }
     
-    private void drawHistogramAvgOrWidthLine(Graphics g, Range range, double predictedValue, double actualValue, double rangeToPixelScaleFactor, int bottomY){
+    private void drawHistogramAvgOrWidthLine(Graphics g, Range range, double predictedValue, double actualValue, double rangeToPixelScaleFactor, int bottomY, int lineWidth, boolean extendToTop){
         if(predictedValue >= range.min && predictedValue <= range.max){
             int predictedXValue = (int)Math.round((predictedValue - range.min) * rangeToPixelScaleFactor);
             int actualXValue = (int)Math.round((actualValue - range.min) * rangeToPixelScaleFactor);
             if(actualXValue == predictedXValue)
                 actualXValue++;
-            int predictedYValue = predCurveYValues[predictedXValue];
+            predictedXValue = Math.max(0, Math.min(predCurveYValues.length - 1, predictedXValue));
+            int predictedYValue = extendToTop
+                    ? StatPanel.topEdge : StatPanel.topEdge + predCurveYValues[predictedXValue];
                 
             g.setColor(Color.ORANGE);
-            g.drawRect(predictedXValue + StatPanel.edge, bottomY, 1, predictedYValue - bottomY + StatPanel.topEdge);
+            drawVerticalMarker(g, predictedXValue + StatPanel.edge, predictedYValue, bottomY, lineWidth);
             
             g.setColor(new Color(0, 210, 0));//special green
-            g.drawRect(actualXValue + StatPanel.edge, bottomY, 1, predictedYValue - bottomY + StatPanel.topEdge);//same height as prediction
+            drawVerticalMarker(g, actualXValue + StatPanel.edge, predictedYValue, bottomY, lineWidth);//same height as prediction
         }
     }
+
+    private static void drawVerticalMarker(Graphics g, int centerX, int topY, int bottomY, int lineWidth) {
+        g.fillRect(centerX - (lineWidth / 2), topY, lineWidth, Math.max(1, bottomY - topY));
+    }
+
+    private void drawVelocityRmsLines(Graphics g, StatisticWithDistribution statistic, Range range, Unit unit) {
+        double predictedAverage = statistic.getPredictionForAverage(unit);
+        double predictedWidth = statistic.getDistributionWidthPrediction(unit);
+        double actualAverage = cumulativeAverage
+                ? statistic.getCumulativeAverage(unit) : statistic.getCurrentAverage(unit);
+        double actualWidth = cumulativeAverage
+                ? statistic.getCumulativeDistributionWidth(unit) : statistic.getCurrentDistributionWidth(unit);
+
+        double predictedRms = rmsFromMeanAndWidth(predictedAverage, predictedWidth);
+        double actualRms = rmsFromMeanAndWidth(actualAverage, actualWidth);
+        double scale = predCurveYValues.length / range.getDistanceFromMinToMax();
+        int bottomY = getSize().height - StatPanel.bottomBuffer - StatPanel.edge;
+
+        drawVelocityMarker(g, range, predictedRms, scale, bottomY, new Color(35, 105, 220));
+        drawVelocityMarker(g, range, actualRms, scale, bottomY, new Color(170, 45, 190));
+    }
+
+    private static double rmsFromMeanAndWidth(double mean, double width) {
+        if (!Double.isFinite(mean) || !Double.isFinite(width)) {
+            return Double.NaN;
+        }
+        return Math.sqrt(mean * mean + width * width);
+    }
+
+    private void drawVelocityMarker(Graphics g, Range range, double value,
+            double rangeToPixelScaleFactor, int bottomY, Color color) {
+        if (!Double.isFinite(value) || value < range.min || value > range.max) {
+            return;
+        }
+
+        int x = (int) Math.round((value - range.min) * rangeToPixelScaleFactor);
+        x = Math.max(0, Math.min(predCurveYValues.length - 1, x));
+        int topY = StatPanel.topEdge;
+        g.setColor(color);
+        drawVerticalMarker(g, x + StatPanel.edge, topY, bottomY, 3);
+    }
+
+    private void drawVelocityMarkerLegend(Graphics g) {
+        int y = 10;
+        drawLegendPair(g, StatPanel.edge + 2, y, Color.ORANGE,
+                new Color(0, 210, 0), "avg");
+        drawLegendPair(g, StatPanel.edge + 62, y, new Color(35, 105, 220),
+                new Color(170, 45, 190), "RMS");
+    }
+
+    private static void drawLegendPair(Graphics g, int x, int y,
+            Color predictedColor, Color actualColor, String label) {
+        g.setColor(predictedColor);
+        g.fillRect(x, y - 1, 5, 3);
+        g.setColor(actualColor);
+        g.fillRect(x + 5, y - 1, 5, 3);
+        g.setColor(Color.BLACK);
+        g.drawString(label, x + 12, y + 3);
+    }
     
-    private void drawHistogramLines(Dimension panelSize, Graphics g, Range distributionRange) {
+    private static double calculateNiceTickInterval(double range, int axisWidth) {
+        if (!(range > 0.0) || !Double.isFinite(range)) {
+            return 1.0;
+        }
+
+        int targetIntervals = Math.max(2, Math.min(8, axisWidth / 85));
+        double rawInterval = range / targetIntervals;
+        double magnitude = Math.pow(10.0, Math.floor(Math.log10(rawInterval)));
+        double normalizedInterval = rawInterval / magnitude;
+        double niceMultiplier;
+        if (normalizedInterval <= 1.0) {
+            niceMultiplier = 1.0;
+        } else if (normalizedInterval <= 2.0) {
+            niceMultiplier = 2.0;
+        } else if (normalizedInterval <= 5.0) {
+            niceMultiplier = 5.0;
+        } else {
+            niceMultiplier = 10.0;
+        }
+        return niceMultiplier * magnitude;
+    }
+
+    private static Range expandToNiceTickBounds(Range range, double tickInterval) {
+        double span = range.getDistanceFromMinToMax();
+        if (!(span > 0.0) || !Double.isFinite(span)
+                || !(tickInterval > 0.0) || !Double.isFinite(tickInterval)) {
+            return range;
+        }
+
+        double minUnits = range.min / tickInterval;
+        double maxUnits = range.max / tickInterval;
+        double minTolerance = 4.0 * Math.ulp(minUnits);
+        double maxTolerance = 4.0 * Math.ulp(maxUnits);
+        double min = Math.floor(minUnits + minTolerance) * tickInterval;
+        double max = Math.ceil(maxUnits - maxTolerance) * tickInterval;
+        if (!(max > min)) {
+            return range;
+        }
+        return new Range(min, max);
+    }
+
+    private void drawHistogramLines(Dimension panelSize, Graphics g, Range distributionRange,
+            double majorTickInterval) {
         g.setColor(Color.BLACK);
         FontMetrics font = g.getFontMetrics();
 
         //Draw the axis.
         g.drawLine(StatPanel.edge, panelSize.height-StatPanel.edge-StatPanel.bottomBuffer, panelSize.width-StatPanel.edge, panelSize.height-StatPanel.edge-StatPanel.bottomBuffer);
         g.drawLine(StatPanel.edge, StatPanel.topEdge, StatPanel.edge, panelSize.height-StatPanel.edge-StatPanel.bottomBuffer);
-        double dStat = distributionRange.getDistanceFromMinToMax();
-        int width = panelSize.width-(2*StatPanel.edge);
-        
-        //Draw the tick marks and x-axis labels.
-        for (int i = 0; i < 5; i++)
-        {
-            int x = StatPanel.edge + (i * width) / 4;
-            double value = distributionRange.min + (i * dStat) / 4.0;
-            
+        double span = distributionRange.getDistanceFromMinToMax();
+        int width = panelSize.width - (2 * StatPanel.edge);
+        if (!(span > 0.0) || !(majorTickInterval > 0.0) || width <= 0) {
+            return;
+        }
 
-            //Vertically displaces every other label.
-            int fall = ((i % 2 == 1) ? 10 : 0);
+        int numberOfIntervals = (int) Math.round(span / majorTickInterval);
+        int axisY = panelSize.height - StatPanel.edge - StatPanel.bottomBuffer;
+        int minorTickLength = 3;
+        int majorTickLength = 6;
+        int subdivisions = 5;
 
-            g.drawLine(x,panelSize.height-StatPanel.edge-StatPanel.bottomBuffer-1,x,panelSize.height-StatPanel.edge-StatPanel.bottomBuffer+2+fall);
-
-            //Round the first and last labels, as in the text box abscissa limits.
-            String str;
-            if (i == 0 || i == 4) {
-                double[] minAndMax = StatUtils.roundValues(distributionRange.min, distributionRange.max);
-                if (i == 0) str = ErrorHandler.format(minAndMax[0], 5);
-                else str = ErrorHandler.format(minAndMax[1], 5);
-            } else {
-                str = ErrorHandler.format(0.0 + value, 5);
+        // Add four short ticks between each pair of evenly spaced, labeled major ticks.
+        for (int interval = 0; interval < numberOfIntervals; interval++) {
+            double startValue = distributionRange.min + interval * majorTickInterval;
+            for (int subdivision = 1; subdivision < subdivisions; subdivision++) {
+                double value = startValue + majorTickInterval * subdivision / subdivisions;
+                int x = histogramTickX(value, distributionRange, width);
+                g.drawLine(x, axisY, x, axisY + minorTickLength);
             }
+        }
 
-            g.drawString(str ,x-SwingUtilities.computeStringWidth(font,str)/2, panelSize.height-StatPanel.edge-StatPanel.bottomBuffer+15+fall);
+        for (int interval = 0; interval <= numberOfIntervals; interval++) {
+            double value = distributionRange.min + interval * majorTickInterval;
+            int x = histogramTickX(value, distributionRange, width);
+            g.drawLine(x, axisY, x, axisY + majorTickLength);
+
+            String label = formatHistogramTick(value, majorTickInterval);
+            int labelWidth = font.stringWidth(label);
+            int labelX = Math.max(0, Math.min(panelSize.width - labelWidth,
+                    x - labelWidth / 2));
+            g.drawString(label, labelX, axisY + 15);
         }
     }
 
-    private void overlayPredictionCurve(Graphics g, StatisticWithDistribution statisticWithDistribution) {        
-        if (statisticWithDistribution.hasNewPredictionCurve()) {
-            redrawPredictionCurve(statisticWithDistribution);
+    private static int histogramTickX(double value, Range range, int axisWidth) {
+        double fraction = (value - range.min) / range.getDistanceFromMinToMax();
+        return StatPanel.edge + (int) Math.round(fraction * axisWidth);
+    }
+
+    private static String formatHistogramTick(double value, double tickInterval) {
+        int maximumFractionDigits = Math.max(0, Math.min(10,
+                (int) Math.ceil(-Math.log10(tickInterval) - 1.0e-10)));
+        NumberFormat format = NumberFormat.getNumberInstance();
+        format.setGroupingUsed(false);
+        format.setMaximumFractionDigits(maximumFractionDigits);
+
+        if (Math.abs(value) >= 1.0e6 || (Math.abs(value) > 0.0 && Math.abs(value) < 1.0e-3)) {
+            return ErrorHandler.format(value, 4);
+        }
+        return format.format(value);
+    }
+
+    private void overlayPredictionCurve(Graphics g, StatisticWithDistribution statisticWithDistribution,
+            Range displayedRange) {
+        if (statisticWithDistribution.hasNewPredictionCurve()
+                || !rangesMatch(predictionCurveRanges.get(statisticWithDistribution), displayedRange)) {
+            redrawPredictionCurve(statisticWithDistribution, displayedRange);
         }
 
         int topY = StatPanel.topEdge;
         int leftX = StatPanel.edge;
 
-        g.drawImage(predictionCurves.get(statisticWithDistribution), leftX, topY, null);
+        BufferedImage predictionCurve = predictionCurves.get(statisticWithDistribution);
+        if (predictionCurve != null) {
+            g.drawImage(predictionCurve, leftX, topY, null);
+        }
+    }
+
+    public void setFrozenHistogramRange(Range range) {
+        frozenHistogramRange = range;
     }
 
     public void clearPlot() {

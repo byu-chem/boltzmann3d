@@ -22,6 +22,7 @@ import edu.byu.chem.boltzmann.utils.Units.Length;
 import edu.byu.chem.boltzmann.utils.Units.Temperature;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo.ArenaType;
+import edu.byu.chem.boltzmann.utils.data.SimulationInfo.DividerThermalMode;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo.Dimension;
 import edu.byu.chem.boltzmann.view.maingui.components.textfields.UnitTextField;
 
@@ -112,6 +113,14 @@ public class ArenaSettingsTab extends javax.swing.JPanel {
     
     public ArenaType getArenaType() {
         return arenaTypeSettings.getType();
+    }
+
+    public void setDividerThermalMode(DividerThermalMode mode) {
+        arenaTypeSettings.setDividerThermalMode(mode);
+    }
+
+    public DividerThermalMode getDividerThermalMode() {
+        return arenaTypeSettings.getDividerThermalMode();
     }
     
     public void setDividedArenaHoleDiameter(double diameter, Length units) {
@@ -236,7 +245,7 @@ public class ArenaSettingsTab extends javax.swing.JPanel {
         pnlSpacer12.setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.CENTER, 5, 0));
         pnlTypeButtons.add(pnlSpacer12);
 
-        arenaTypeSettings.setPreferredSize(new java.awt.Dimension(250, 259));
+        arenaTypeSettings.setPreferredSize(new java.awt.Dimension(250, 295));
         pnlTypeButtons.add(arenaTypeSettings);
 
         pnlFiller3.setLayout(new java.awt.CardLayout());

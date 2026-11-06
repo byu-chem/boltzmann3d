@@ -125,7 +125,7 @@ public class YVelocity implements StatisticWithDistribution<Velocity> {
         
         CalculatorByType widthCalculator = new CalculatorByType() {
             public double valueForType(ParticleType type) {
-                    return Formulas.velocityComponentWidth(simInfo.initialTemperature,
+                    return Formulas.velocityComponentWidth(simInfo.getInitialTemperature(type),
                     Units.convert("amu", "kg", type.particleMass));
             }
         };
@@ -137,7 +137,7 @@ public double distributionFunction(double x, ParticleType particleType) {
         if (useFiniteSystemCorrections) {
             return correctedVelDistribution(x,
                     Units.convert("amu", "kg", particleType.particleMass),
-                    simInfo.initialTemperature,
+                    simInfo.getInitialTemperature(particleType),
                     simInfo.dimension,
                     simInfo.isPeriodic(),
                     simInfo.totalNumParticles,
@@ -147,7 +147,7 @@ public double distributionFunction(double x, ParticleType particleType) {
         } else {
             return velocityDistribution(x,
                     Units.convert("amu", "kg", particleType.particleMass),
-                    simInfo.initialTemperature,
+                    simInfo.getInitialTemperature(particleType),
                     simInfo.dimension);
         }
     }

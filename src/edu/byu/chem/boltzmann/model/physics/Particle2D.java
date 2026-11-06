@@ -1129,6 +1129,10 @@ public class Particle2D extends Particle {
         return xVel;
     }
 
+    public void setXVel(double velocity) {
+        xVel = velocity;
+    }
+
     public double getYVel() {
         return yVel;
     }
