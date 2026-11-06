@@ -64,15 +64,26 @@ jobs:
         shell: pwsh
         run: |
           $buildLog = Join-Path $env:GITHUB_WORKSPACE 'build.log'
-          $errorLog = Join-Path $env:GITHUB_WORKSPACE 'build.err'
-          $process = Start-Process -FilePath $env:ComSpec `
-            -ArgumentList @('/c', 'ant -noinput package') `
-            -PriorityClass BelowNormal -PassThru -Wait -NoNewWindow `
-            -RedirectStandardOutput $buildLog -RedirectStandardError $errorLog
-          if (Test-Path $errorLog) {
-            Get-Content $errorLog | Add-Content $buildLog
+          $packageLog = Join-Path $env:GITHUB_WORKSPACE 'package.log'
+          $errorLog = Join-Path $env:GITHUB_WORKSPACE 'package.err'
+          try {
+            $process = Start-Process -FilePath $env:ComSpec `
+              -ArgumentList @('/c', 'ant -noinput package') `
+              -PassThru -NoNewWindow `
+              -RedirectStandardOutput $packageLog -RedirectStandardError $errorLog
+            $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::BelowNormal
+            $process.WaitForExit()
+          } catch {
+            ($_ | Out-String) | Add-Content $buildLog
+            Get-Content $buildLog
+            throw
           }
-          Get-Content $buildLog
+          if (Test-Path $packageLog) {
+            Get-Content $packageLog | Tee-Object -FilePath $buildLog -Append
+          }
+          if (Test-Path $errorLog) {
+            Get-Content $errorLog | Tee-Object -FilePath $buildLog -Append
+          }
           if ($process.ExitCode -ne 0) { exit $process.ExitCode }
       - name: Verify Windows installation and uninstallation
         if: runner.os == 'Windows'
