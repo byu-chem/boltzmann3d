@@ -274,6 +274,15 @@ public class PistonFullView extends javax.swing.JPanel implements PistonView {
         currentPistonPosition = newPosition;
 }//GEN-LAST:event_btnMoveActionPerformed
 
+    @Override
+    public boolean startPiston() {
+        if (!btnMove.isEnabled()) {
+            return false;
+        }
+        btnMoveActionPerformed(null);
+        return true;
+    }
+
     private void btnCloseActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnCloseActionPerformed
         controller.hidePistonControls();
 }//GEN-LAST:event_btnCloseActionPerformed

@@ -6,7 +6,7 @@ import edu.byu.chem.boltzmann.resources.SimulationPresets;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo;
 import edu.byu.chem.boltzmann.view.maingui.MainGuiController;
 import edu.byu.chem.boltzmann.view.maingui.MainGuiView;
-import edu.byu.chem.boltzmann.view.maingui.components.GLPanel;
+import edu.byu.chem.boltzmann.view.render.lwjgl.GLPanel;
 import edu.byu.chem.boltzmann.view.simulationsettings.SimSettingsView;
 import edu.byu.chem.boltzmann.view.piston.PistonView;
 import edu.byu.chem.boltzmann.view.heatreservoir.HeatResView;

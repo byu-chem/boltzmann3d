@@ -3,24 +3,26 @@
 A kinetic theory demonstrator. Copyright (C) 2013 Dr. Randall B. Shirts.
 Licensed under GPL-3.0; see LICENSE.
 
-## Java 25 / 64-bit desktop port
+## Java 25 / LWJGL 3 desktop port
 
-This branch migrates the Swing application's graphics from LWJGL 2 to JOGL
-2.6.0 and GlueGen 2.6.0. The initial targets are:
+The Swing application's graphics backend uses LWJGL 3.4.2 with the
+LWJGLX AWT surface library 0.2.5. The initial targets are:
 
-- Apple Silicon macOS, using an ARM64 JDK and JogAmp's universal macOS natives.
-- Windows 10/11 x64, using an x64 JDK and the Windows amd64 natives.
+- Apple Silicon macOS, using an ARM64 JDK and LWJGL's macOS ARM64 natives.
+- Windows 10/11 x64, using an x64 JDK and LWJGL's Windows x64 natives.
 
-The renderer requests an OpenGL GL2 compatibility profile to preserve its
-fixed-function drawing code. A core-only OpenGL context is insufficient.
-This is an initial migration: compilation and headless checks do not establish
-that rendering works on every target GPU. Interactive validation is required.
+The application uses an OpenGL 3.2 core-profile renderer. It supports particles,
+arena walls, dividers, divider openings, pistons, periodic images, and
+accumulating traces. The 2D divider opening appears as a straight gap; the 3D
+opening has a gray rim. The obsolete OpenGL 2.1 compatibility drawing path has
+been removed. Compilation and headless checks do not establish that rendering
+works on every target GPU; use `ant test-render-core` and check the app on each
+supported desktop platform.
 
 The Swing forms and bundled swing-layout-1.0.4.jar are retained for this pass.
 The obsolete applet modules and two legacy pressure implementations retain
 their original build exclusions. Simulation equations have not been changed.
-Historical LWJGL license/logo resources remain with the existing About UI;
-LWJGL, JInput and OpenAL are no longer runtime dependencies.
+Historical LWJGL license/logo resources remain with the existing About UI.
 
 ## Requirements
 
@@ -44,9 +46,10 @@ ant run
 ```
 
 The first build downloads the pinned Java libraries from Maven Central into
-build/deps. Running or distributing the application also downloads native JARs
-for the host target. JOGL extracts the correct native binaries automatically;
-no java.library.path setting or system-wide JOGL installation is needed.
+build/deps. Running or distributing the application also downloads LWJGL's
+native JARs for the host target. LWJGL extracts the matching native libraries at
+runtime; no java.library.path setting or system-wide graphics installation is
+needed.
 `ant clean` preserves the dependency cache for offline rebuilds.
 
 The resulting dist directory contains Boltzmann3D.jar, its lib directory and
@@ -56,7 +59,8 @@ LICENSE. Keep them together. With Java 25 selected, run:
 java -jar dist/Boltzmann3D.jar
 ```
 
-Both launch routes grant native access and the AWT exports used by JOGL.
+Both launch routes grant native access, the AWT exports used by the Swing
+surface integration, and LWJGL's JDK 25 memory-backend export.
 
 ## Checks
 
@@ -70,14 +74,12 @@ GitHub Actions builds and runs these checks with Java 25 on macOS ARM64 and
 Windows x64, then uploads each dist directory. Hosted builds do not validate
 Windows 10 or interactive graphics.
 
-With a graphical desktop and working OpenGL driver, run `ant test-render` for
-the graphics regression check. It briefly opens a test window, reads particle
-pixels from the framebuffer in 1D/2D/3D, counts 3D wall pixels independently,
-and checks 3D rotation, resizing and
-periodic/divided/hole/piston boundaries, then switching back to 2D. The 3D
-renderer converts physical lengths to nanometers before sending them to OpenGL;
-the projection matrix contains only the camera frustum. Run this from a normal desktop terminal; the headless
-`ant test` checks do not open a window.
+With a graphical desktop and working OpenGL driver, run `ant test-render-core`
+(or its alias, `ant test-render`). It briefly opens a test window, reads
+particle pixels from the framebuffer in 1D/2D/3D, checks 3D wall pixels,
+rotation, resizing and periodic/divided/hole/piston boundaries, and exercises
+trace points. Run these from a normal desktop terminal; the headless `ant test`
+checks do not open a window.
 
 On both targets, manually check:
 
@@ -89,9 +91,9 @@ On both targets, manually check:
 
 ## Application packaging
 
-Packages include their own Java 25 runtime, JOGL libraries and matching natives.
+Packages include their own Java 25 runtime, LWJGL libraries and matching natives.
 Users do not need Java, Ant or Homebrew installed. The package version
-is 3.1.1; override it with `-Dapp.version=3.1.2` for a subsequent package.
+is 3.2.0; override it with `-Dapp.version=3.2.1` for a subsequent package.
 
 On Apple Silicon, select the ARM64 JDK explicitly (Homebrew's Ant may otherwise
 choose its own newer JDK), then build:
@@ -105,7 +107,7 @@ ant package
 Outputs:
 
 - `packages/images/Boltzmann3D.app` — the standalone Mac app.
-- `packages/installers/Boltzmann3D-3.1.1.dmg` — open it and drag the app to Applications.
+- `packages/installers/Boltzmann3D-3.2.0.dmg` — open it and drag the app to Applications.
 
 `ant package` needs normal desktop access for macOS disk-image tooling.
 `ant package-image` builds just the app; `ant test-packaged` checks the shipped
@@ -127,7 +129,7 @@ ant package
 Outputs:
 
 - `packages/images/Boltzmann3D/` — a portable app directory with Boltzmann3D.exe.
-- `packages/installers/Boltzmann3D-3.1.1.exe` — a per-user installer with a Start
+- `packages/installers/Boltzmann3D-3.2.0.exe` — a per-user installer with a Start
   menu entry, desktop shortcut and uninstall support.
 
 Packages must be built on their target operating system. GitHub Actions builds
@@ -163,7 +165,7 @@ particles cross between compartments.
 
 `ant test` checks typed particle edits, decimal masses, temperature, capacity
 validation and settings/physics round trips through 2D and 3D in US and German
-locales. `ant test-render` additionally checks repeated dimension transitions and
+locales. `ant test-render-core` additionally checks repeated dimension transitions and
 rejects a particle that fills the 2D framebuffer.
 
 ### Original preset simulations

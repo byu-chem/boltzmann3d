@@ -17,6 +17,7 @@
  */
 package edu.byu.chem.boltzmann.view.maingui.components;
 
+import edu.byu.chem.boltzmann.view.render.lwjgl.GLPanel;
 import edu.byu.chem.boltzmann.controller.ErrorHandler;
 import edu.byu.chem.boltzmann.model.physics.FrameInfo;
 import edu.byu.chem.boltzmann.utils.Units;

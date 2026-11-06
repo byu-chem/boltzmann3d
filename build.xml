@@ -6,7 +6,12 @@
     <property name="deps" location="build/deps"/>
     <property name="test.bin" location="build/test-classes"/>
     <property name="java.release" value="25"/>
-    <property name="jogamp.version" value="2.6.0"/>
+    <!-- Match the LWJGL version used to build lwjgl3-awt 0.2.5. -->
+    <property name="lwjgl.version" value="3.4.2"/>
+    <property name="lwjgl.awt.version" value="0.2.5"/>
+    <!-- Select LWJGL's JDK 25 backend instead of legacy sun.misc.Unsafe. -->
+    <property name="lwjgl.internal.package" value="java.base/jdk.internal.misc"/>
+    <property name="lwjgl.jdk.options" value="--add-exports=${lwjgl.internal.package}=ALL-UNNAMED"/>
     <property name="maven.repo" value="https://repo.maven.apache.org/maven2"/>
     <property name="main.class" value="edu.byu.chem.boltzmann.fullapplication.Main"/>
     <!-- Keep the generated Swing forms and layout library for this first port. -->
@@ -14,11 +19,12 @@
 
     <path id="compile.classpath">
         <pathelement location="${swing.jar}"/>
-        <fileset dir="${deps}" includes="*.jar" erroronmissingdir="false"/>
+        <fileset dir="${deps}" includes="lwjgl-${lwjgl.version}.jar,lwjgl-opengl-${lwjgl.version}.jar,lwjgl-jawt-${lwjgl.version}.jar,lwjgl-egl-${lwjgl.version}.jar,lwjgl3-awt-${lwjgl.awt.version}.jar" erroronmissingdir="false"/>
     </path>
     <path id="runtime.classpath">
         <path refid="compile.classpath"/>
         <pathelement location="${bin}"/>
+        <fileset dir="${deps}" includes="lwjgl-${lwjgl.version}-natives-*.jar,lwjgl-opengl-${lwjgl.version}-natives-*.jar" erroronmissingdir="false"/>
     </path>
 
     <target name="init">
@@ -27,18 +33,24 @@
         <mkdir dir="${deps}"/>
     </target>
 
-    <target name="deps" depends="init" description="Fetch pinned JOGL and GlueGen Java libraries">
-        <get src="${maven.repo}/org/jogamp/jogl/jogl-all/${jogamp.version}/jogl-all-${jogamp.version}.jar"
-             dest="${deps}/jogl-all-${jogamp.version}.jar" skipexisting="true"/>
-        <get src="${maven.repo}/org/jogamp/gluegen/gluegen-rt/${jogamp.version}/gluegen-rt-${jogamp.version}.jar"
-             dest="${deps}/gluegen-rt-${jogamp.version}.jar" skipexisting="true"/>
+    <target name="deps" depends="init" description="Fetch pinned LWJGL 3 and Swing AWT surface libraries">
+        <get src="${maven.repo}/org/lwjgl/lwjgl/${lwjgl.version}/lwjgl-${lwjgl.version}.jar"
+             dest="${deps}/lwjgl-${lwjgl.version}.jar" skipexisting="true"/>
+        <get src="${maven.repo}/org/lwjgl/lwjgl-opengl/${lwjgl.version}/lwjgl-opengl-${lwjgl.version}.jar"
+             dest="${deps}/lwjgl-opengl-${lwjgl.version}.jar" skipexisting="true"/>
+        <get src="${maven.repo}/org/lwjgl/lwjgl-jawt/${lwjgl.version}/lwjgl-jawt-${lwjgl.version}.jar"
+             dest="${deps}/lwjgl-jawt-${lwjgl.version}.jar" skipexisting="true"/>
+        <get src="${maven.repo}/org/lwjgl/lwjgl-egl/${lwjgl.version}/lwjgl-egl-${lwjgl.version}.jar"
+             dest="${deps}/lwjgl-egl-${lwjgl.version}.jar" skipexisting="true"/>
+        <get src="${maven.repo}/org/lwjglx/lwjgl3-awt/${lwjgl.awt.version}/lwjgl3-awt-${lwjgl.awt.version}.jar"
+             dest="${deps}/lwjgl3-awt-${lwjgl.awt.version}.jar" skipexisting="true"/>
     </target>
 
     <target name="platform">
-        <condition property="native.classifier" value="natives-macosx-universal">
+        <condition property="native.classifier" value="natives-macos-arm64">
             <and><os family="mac"/><or><os arch="aarch64"/><os arch="arm64"/></or></and>
         </condition>
-        <condition property="native.classifier" value="natives-windows-amd64">
+        <condition property="native.classifier" value="natives-windows">
             <and><os family="windows"/><or><os arch="amd64"/><os arch="x86_64"/></or></and>
         </condition>
         <fail unless="native.classifier"
@@ -46,14 +58,22 @@
     </target>
 
     <target name="native-deps" depends="deps,platform" description="Fetch natives for the current target">
-        <!-- JOGL extracts matching native libraries from these JARs itself. -->
-        <get src="${maven.repo}/org/jogamp/jogl/jogl-all/${jogamp.version}/jogl-all-${jogamp.version}-${native.classifier}.jar"
-             dest="${deps}/jogl-all-${jogamp.version}-${native.classifier}.jar" skipexisting="true"/>
-        <get src="${maven.repo}/org/jogamp/gluegen/gluegen-rt/${jogamp.version}/gluegen-rt-${jogamp.version}-${native.classifier}.jar"
-             dest="${deps}/gluegen-rt-${jogamp.version}-${native.classifier}.jar" skipexisting="true"/>
+        <get src="${maven.repo}/org/lwjgl/lwjgl/${lwjgl.version}/lwjgl-${lwjgl.version}-${native.classifier}.jar"
+             dest="${deps}/lwjgl-${lwjgl.version}-${native.classifier}.jar" skipexisting="true"/>
+        <get src="${maven.repo}/org/lwjgl/lwjgl-opengl/${lwjgl.version}/lwjgl-opengl-${lwjgl.version}-${native.classifier}.jar"
+             dest="${deps}/lwjgl-opengl-${lwjgl.version}-${native.classifier}.jar" skipexisting="true"/>
     </target>
 
     <target name="compile" depends="deps" description="Compile the desktop app with Java 25">
+        <!-- Prevent obsolete JOGL output from being carried into the runnable JAR. -->
+        <delete dir="${bin}/edu/byu/chem/boltzmann/view/render/jogl"/>
+        <!-- Remove class files from the retired compatibility renderer. -->
+        <delete>
+            <fileset dir="${bin}/edu/byu/chem/boltzmann/view/render/lwjgl"
+                     includes="LwjglRenderer*.class" erroronmissingdir="false"/>
+        </delete>
+        <!-- Remove the former generated Swing form's retired GLPanel class. -->
+        <delete file="${bin}/edu/byu/chem/boltzmann/view/maingui/components/GLPanel.class"/>
         <!-- These obsolete applets and pressure classes were already excluded. -->
         <javac srcdir="${src}" destdir="${bin}" release="${java.release}"
                encoding="UTF-8" debug="true" includeantruntime="false"
@@ -63,6 +83,8 @@
     </target>
 
     <target name="test" depends="compile" description="Check settings and physics without a display">
+        <!-- Force a complete test compilation instead of reusing stale classes. -->
+        <delete dir="${test.bin}"/>
         <mkdir dir="${test.bin}"/>
         <javac srcdir="tests" destdir="${test.bin}" release="${java.release}"
                encoding="UTF-8" includeantruntime="false" classpathref="runtime.classpath"/>
@@ -85,20 +107,24 @@
         </java>
     </target>
 
-    <target name="test-render" depends="test,native-deps" description="Check rendered particle pixels (requires a display)">
+    <target name="test-render" depends="test-render-core"
+            description="Alias for the core-profile rendering check"/>
+
+    <target name="test-render-core" depends="test,native-deps" description="Check core-profile rendering (requires a display)">
         <java classname="edu.byu.chem.boltzmann.tests.RenderingSmokeTest" fork="true" failonerror="true" timeout="60000">
             <classpath><path refid="runtime.classpath"/><pathelement location="${test.bin}"/></classpath>
-            <jvmarg value="-Dboltzmann.opengl.debug=true"/>
             <jvmarg value="--enable-native-access=ALL-UNNAMED"/>
+            <jvmarg value="${lwjgl.jdk.options}"/>
             <jvmarg value="--add-exports=java.desktop/sun.awt=ALL-UNNAMED"/>
             <jvmarg value="--add-exports=java.desktop/sun.java2d=ALL-UNNAMED"/>
             <assertions><enable/></assertions>
         </java>
     </target>
 
-    <target name="run" depends="compile,native-deps" description="Run the Swing app with JOGL">
+    <target name="run" depends="compile,native-deps" description="Run the Swing app with LWJGL 3">
         <java classname="${main.class}" fork="true" failonerror="true" classpathref="runtime.classpath">
             <jvmarg value="--enable-native-access=ALL-UNNAMED"/>
+            <jvmarg value="${lwjgl.jdk.options}"/>
             <jvmarg value="--add-exports=java.desktop/sun.awt=ALL-UNNAMED"/>
             <jvmarg value="--add-exports=java.desktop/sun.java2d=ALL-UNNAMED"/>
             <assertions><enable/></assertions>
@@ -110,7 +136,7 @@
         <mkdir dir="${dist}/lib"/>
         <copy file="${swing.jar}" todir="${dist}/lib"/>
         <copy todir="${dist}/lib">
-            <fileset dir="${deps}" includes="jogl-all-${jogamp.version}.jar,gluegen-rt-${jogamp.version}.jar,*-${jogamp.version}-${native.classifier}.jar"/>
+            <fileset dir="${deps}" includes="lwjgl-${lwjgl.version}.jar,lwjgl-opengl-${lwjgl.version}.jar,lwjgl-jawt-${lwjgl.version}.jar,lwjgl-egl-${lwjgl.version}.jar,lwjgl3-awt-${lwjgl.awt.version}.jar,lwjgl-${lwjgl.version}-${native.classifier}.jar,lwjgl-opengl-${lwjgl.version}-${native.classifier}.jar"/>
         </copy>
         <manifestclasspath property="manifest.classpath" jarfile="${dist}/Boltzmann3D.jar">
             <classpath><fileset dir="${dist}/lib" includes="*.jar"/></classpath>
@@ -120,7 +146,7 @@
                 <attribute name="Main-Class" value="${main.class}"/>
                 <attribute name="Class-Path" value="${manifest.classpath}"/>
                 <attribute name="Enable-Native-Access" value="ALL-UNNAMED"/>
-                <attribute name="Add-Exports" value="java.desktop/sun.awt java.desktop/sun.java2d"/>
+                <attribute name="Add-Exports" value="java.desktop/sun.awt java.desktop/sun.java2d ${lwjgl.internal.package}"/>
             </manifest>
         </jar>
         <copy file="LICENSE" todir="${dist}"/>

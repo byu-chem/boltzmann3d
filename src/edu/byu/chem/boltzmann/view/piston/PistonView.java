@@ -29,6 +29,10 @@ public interface PistonView {
         public void attachController(PistonController controller) {
         }
 
+        public boolean startPiston() {
+            return false;
+        }
+
         public void setPistonMoveEnabled(boolean enabled) {
         }
 
@@ -46,6 +50,9 @@ public interface PistonView {
     };
     
     public void attachController(PistonController controller);
+
+    /** Starts the move currently configured in the piston controls, if one is ready. */
+    public boolean startPiston();
     
     public void setPistonMoveEnabled(boolean enabled);
     

@@ -86,6 +86,10 @@ public class MainGuiController {
     public void showPistonControls() {
         rootController.showPistonControls();
     }
+
+    public boolean startPiston() {
+        return rootController.startPiston();
+    }
     
     public void showReservoirControls() {
         rootController.showReservoirControls();

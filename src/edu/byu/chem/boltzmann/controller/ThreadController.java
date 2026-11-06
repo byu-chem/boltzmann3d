@@ -262,9 +262,9 @@ class ThreadController {
         try {
             runSimulationThreads = false;
 
-            // Wake our own waits instead of interrupting JOGL's synchronous
-            // macOS/AWT dispatch. Interrupting a render can throw from JOGL and
-            // leave this thread blocked in the application's error dialog.
+            // Wake our own waits instead of interrupting synchronous AWT
+            // context rendering. Interrupting a render can throw while the
+            // native surface lock is held and leave shutdown blocked.
             displayFrameRate.release();
             physicsFrameRate.release();
             lastFrameDisplayed.release();

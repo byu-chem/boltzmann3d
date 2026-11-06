@@ -1,0 +1,50 @@
+name: Publish Boltzmann3D 3.2.0
+
+on:
+  push:
+    branches: ['modernize/particle-controls']
+    paths:
+      - '.github/releases/3.2.0.json'
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: boltzmann3d-release-3.2.0
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/modernize/particle-controls'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify the tested source build
+        id: source
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const config = require('./.github/releases/3.2.0.json');
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              ...context.repo, run_id: config.source_run
+            });
+            if (run.head_sha !== config.source_commit || run.conclusion !== 'success') {
+              throw new Error('Release source does not match a successful tested build');
+            }
+            core.setOutput('run-id', String(config.source_run));
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.source.outputs.run-id }}
+          pattern: Boltzmann3D-*-installer
+          merge-multiple: true
+          path: release-assets
+      - name: Upload verified assets and publish
+        uses: actions/github-script@v7
+        env:
+          RELEASE_CONFIG: .github/releases/3.2.0.json
+        with:
+          script: |
+            await require('./packaging/publish-release.cjs')({ github, context, core });

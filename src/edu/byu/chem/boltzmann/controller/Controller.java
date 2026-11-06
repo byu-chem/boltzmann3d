@@ -243,6 +243,10 @@ public abstract class Controller {
         getPhysics().AdjustPistonLevel(newPosition, moveMode, moveSpeed); 
     }
 
+    public boolean startPiston() {
+        return pistonControls.startPiston();
+    }
+
     public void stopPiston() {
         double pistonLevel = getPhysics().getPiston().getCurLevel();
         getPhysics().AdjustPistonLevel(pistonLevel); 

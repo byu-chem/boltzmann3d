@@ -1,6 +1,5 @@
 package edu.byu.chem.boltzmann.tests;
 
-import com.jogamp.common.os.Platform;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -16,8 +15,11 @@ public final class PackagedRuntimeSmokeTest {
         if (Runtime.version().feature() != expectedVersion) {
             throw new AssertionError("Expected bundled Java " + expectedVersion + ", got " + Runtime.version());
         }
-        // Forces extraction and loading of GlueGen's architecture-specific JNI library.
-        Platform.initSingleton();
+        // Exercise LWJGL's platform and native-memory initialization from the
+        // packaged runtime, before running the headless application checks.
+        org.lwjgl.system.Platform.get();
+        java.nio.ByteBuffer nativeMemory = org.lwjgl.system.MemoryUtil.memAlloc(8);
+        org.lwjgl.system.MemoryUtil.memFree(nativeMemory);
         System.out.println("Bundled Java: " + Runtime.version() + " (" + System.getProperty("os.arch") + ")");
         System.out.println("Bundled runtime: " + actual);
         ModernizationSmokeTest.main(new String[0]);
@@ -34,6 +36,6 @@ public final class PackagedRuntimeSmokeTest {
             if (new edu.byu.chem.boltzmann.model.io.Load(null).loadFile(file.toFile()) == null)
                 throw new AssertionError("Packaged preset did not load: " + file);
         }
-        System.out.println("PASS: packaged runtime, application resources and native library loading");
+        System.out.println("PASS: packaged runtime, application resources and LWJGL initialization");
     }
 }

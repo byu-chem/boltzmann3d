@@ -32,7 +32,7 @@ import edu.byu.chem.boltzmann.utils.data.ParticleType;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo;
 import edu.byu.chem.boltzmann.view.maingui.MainGuiController;
 import edu.byu.chem.boltzmann.view.maingui.MainGuiView;
-import edu.byu.chem.boltzmann.view.maingui.components.GLPanel;
+import edu.byu.chem.boltzmann.view.render.lwjgl.GLPanel;
 import edu.byu.chem.boltzmann.view.maingui.components.PlayPauseButton;
 import edu.byu.chem.boltzmann.view.maingui.components.StatPanel;
 import edu.byu.chem.boltzmann.view.maingui.components.StatisticReadoutSingle;

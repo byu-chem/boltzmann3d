@@ -44,6 +44,10 @@ public class PistonController {
         rootController.movePiston(newPosition, moveMode, moveSpeed);
     }
 
+    public boolean startPiston() {
+        return view.startPiston();
+    }
+
     public  void setPistonMoveEnabled(boolean enabled) {
         view.setPistonMoveEnabled(enabled);
     }

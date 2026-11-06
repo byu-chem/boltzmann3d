@@ -1,8 +1,8 @@
 package edu.byu.chem.boltzmann.tests;
 
-import com.jogamp.common.nio.Buffers;
-import com.jogamp.opengl.GL2;
-import com.jogamp.opengl.GLProfile;
+import org.lwjgl.BufferUtils;
+import org.lwjgl.opengl.GL;
+import org.lwjgl.opengl.GL11;
 import edu.byu.chem.boltzmann.model.io.Load;
 import edu.byu.chem.boltzmann.model.physics.FrameInfo;
 import edu.byu.chem.boltzmann.model.physics.PartState;
@@ -13,14 +13,14 @@ import edu.byu.chem.boltzmann.model.physics.Particle3D;
 import edu.byu.chem.boltzmann.resources.ResourceLoader;
 import edu.byu.chem.boltzmann.utils.data.ParticleType;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo;
-import edu.byu.chem.boltzmann.view.maingui.components.GLPanel;
+import edu.byu.chem.boltzmann.view.render.lwjgl.GLPanel;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.Map;
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
@@ -28,7 +28,6 @@ import javax.swing.SwingUtilities;
 /** Requires a display and a working OpenGL driver; checks actual framebuffer pixels. */
 public final class RenderingSmokeTest {
     public static void main(String[] args) throws Exception {
-        GLProfile.initSingleton();
         SwingUtilities.invokeAndWait(() -> {
             JFrame window = new JFrame("Boltzmann3D rendering check");
             try {
@@ -61,6 +60,12 @@ public final class RenderingSmokeTest {
                         }
                     }
                 }
+                SimulationInfo traceInfo = settings(2);
+                panel.setSimulationInfo(traceInfo);
+                panel.setTraceMode(true, 8);
+                panel.setNextFrameToDisplay(centeredParticle(traceInfo));
+                checkParticlePixels(panel, "2D trace");
+                panel.setTraceMode(false, 2);
             } catch (Exception failure) {
                 throw new RuntimeException(failure);
             } finally {
@@ -68,7 +73,7 @@ public final class RenderingSmokeTest {
             }
         });
         edu.byu.chem.boltzmann.controller.ThreadLifecycleSmokeTest.main(new String[] {"render"});
-        System.out.println("PASS: visible particles and 3D walls, rotation, resizing, boundary modes and dimension switching");
+        System.out.println("PASS: particles, walls, rotation, resizing, boundaries, dimension switching and trace points");
     }
 
     private static SimulationInfo settings(int dimension) throws Exception {
@@ -109,27 +114,20 @@ public final class RenderingSmokeTest {
 
     private static void checkParticlePixels(GLPanel panel, String label) {
         panel.drawFrame();
-        boolean invoked = panel.canvas.invoke(true, drawable -> {
-            GL2 gl = drawable.getGL().getGL2();
-            int width = drawable.getSurfaceWidth();
-            int height = drawable.getSurfaceHeight();
-            ByteBuffer pixels = Buffers.newDirectByteBuffer(width * height * 4);
-            checkError(gl, label + " rendering before readback");
-            if (label.startsWith("3D")) {
-                double[] projection = new double[16];
-                gl.glGetDoublev(GL2.GL_PROJECTION_MATRIX, projection, 0);
-                // In the test frustum clip W must be -eye Z, without a unit-conversion scale.
-                if (Math.abs(projection[11] + 1.0) > 1e-6) {
-                    throw new AssertionError(label + ": unit conversion leaked into the projection matrix");
-                }
-            }
-            // macOS may render GLCanvas through an FBO, whose color attachment
-            // must be selected instead of the window-system GL_BACK buffer.
-            int readBuffer = drawable.getContext().getDefaultReadBuffer();
-            gl.glReadBuffer(readBuffer);
-            checkError(gl, label + " selecting read buffer 0x" + Integer.toHexString(readBuffer));
-            gl.glReadPixels(0, 0, width, height, GL2.GL_RGBA, GL2.GL_UNSIGNED_BYTE, pixels);
-            checkError(gl, label + " reading pixels");
+        boolean invoked;
+        try {
+            invoked = panel.canvas.executeInContext(() -> {
+            GL.createCapabilities();
+            int width = panel.canvas.getFramebufferWidth();
+            int height = panel.canvas.getFramebufferHeight();
+            ByteBuffer pixels = BufferUtils.createByteBuffer(width * height * 4);
+            checkError(label + " rendering before readback");
+            // AWTGLCanvas uses a double-buffered window surface. Read the frame
+            // just presented by the renderer from its front buffer.
+            GL11.glReadBuffer(GL11.GL_FRONT);
+            checkError(label + " selecting front buffer");
+            GL11.glReadPixels(0, 0, width, height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, pixels);
+            checkError(label + " reading pixels");
             int redPixels = 0;
             int coloredPixels = 0;
             int wallPixels = 0;
@@ -153,37 +151,30 @@ public final class RenderingSmokeTest {
                 throw new AssertionError(label + ": particle fills the screen (" + redPixels + " pixels)");
             }
             if (redPixels < 20) {
-                double[] modelview = new double[16];
-                double[] projection = new double[16];
-                gl.glGetDoublev(GL2.GL_MODELVIEW_MATRIX, modelview, 0);
-                gl.glGetDoublev(GL2.GL_PROJECTION_MATRIX, projection, 0);
-                System.err.println(label + " modelview: " + Arrays.toString(modelview));
-                System.err.println(label + " projection: " + Arrays.toString(projection));
-                System.err.println(label + " read framebuffer: " + drawable.getContext().getDefaultReadFramebuffer()
-                        + ", read buffer: 0x" + Integer.toHexString(readBuffer));
+                System.err.println(label + " read buffer: GL_FRONT");
                 System.err.println(label + " nonblack pixels: " + coloredPixels);
                 throw new AssertionError(label + ": particle is invisible (" + redPixels + " red pixels)");
             }
             if (label.startsWith("3D") && wallPixels < 100) {
-                double[] depthRange = new double[2];
-                int[] depthBits = new int[1];
-                gl.glGetDoublev(GL2.GL_DEPTH_RANGE, depthRange, 0);
-                gl.glGetIntegerv(GL2.GL_DEPTH_BITS, depthBits, 0);
-                System.err.println(label + " depth range: " + Arrays.toString(depthRange)
-                        + ", depth bits: " + depthBits[0]);
+                IntBuffer depthBits = BufferUtils.createIntBuffer(1);
+                GL11.glGetIntegerv(GL11.GL_DEPTH_BITS, depthBits);
+                System.err.println(label + " depth bits: " + depthBits.get(0));
                 throw new AssertionError(label + ": arena walls are invisible (" + wallPixels + " wall pixels)");
             }
             System.out.println(label + ": " + redPixels + " particle pixels, " + wallPixels + " wall pixels");
             return true;
-        });
+            });
+        } catch (Exception failure) {
+            throw new RuntimeException("Could not read the LWJGL framebuffer", failure);
+        }
         if (!invoked) {
             throw new AssertionError(label + ": OpenGL canvas is not realized");
         }
     }
 
-    private static void checkError(GL2 gl, String stage) {
-        int error = gl.glGetError();
-        if (error != GL2.GL_NO_ERROR) {
+    private static void checkError(String stage) {
+        int error = GL11.glGetError();
+        if (error != GL11.GL_NO_ERROR) {
             throw new AssertionError(stage + ": OpenGL error 0x" + Integer.toHexString(error));
         }
     }

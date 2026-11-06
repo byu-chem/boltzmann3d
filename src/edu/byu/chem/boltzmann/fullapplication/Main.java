@@ -29,7 +29,6 @@ import edu.byu.chem.boltzmann.model.io.Load;
 import edu.byu.chem.boltzmann.resources.ResourceLoader;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo;
 import edu.byu.chem.boltzmann.utils.data.StatSettingsInfo;
-import com.jogamp.opengl.GLProfile;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
@@ -48,9 +47,6 @@ public class Main {
     public static void main(String args[]) {
         ErrorHandler.attachDefaultExceptionHandlers();
 
-        // Initialize native graphics before constructing Swing windows on the EDT.
-        GLProfile.initSingleton();
-        
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {        
@@ -79,6 +75,7 @@ public class Main {
                     Load loader = new Load(null);
                     defaultSim = loader.loadFile(ResourceLoader.getDefaultSetFileURL());
                     rootController.setSimulationInfo(defaultSim);
+                    mainWindow.setTraceMode(loader.isTraceMode(), loader.getTracePointSize());
 
                     mainWindow.setVisible(true);
                 } catch (Exception e) {

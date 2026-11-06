@@ -24,7 +24,7 @@ import edu.byu.chem.boltzmann.resources.ResourceLoader;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo;
 import edu.byu.chem.boltzmann.utils.data.StatSettingsInfo;
 import edu.byu.chem.boltzmann.view.maingui.MainGuiView;
-import edu.byu.chem.boltzmann.view.maingui.components.GLPanel.ColorMode;
+import edu.byu.chem.boltzmann.view.render.ParticleColorMode;
 import java.io.File;
 import javax.swing.JFileChooser;
 import javax.swing.filechooser.FileFilter;
@@ -62,8 +62,10 @@ public class MainGuiWindow extends javax.swing.JFrame {
                 javax.swing.JMenuItem item = new javax.swing.JMenuItem(preset.label());
                 item.addActionListener(event -> {
                     try {
-                        SimulationInfo info = new Load(null).loadFile(preset.source());
+                        Load loader = new Load(null);
+                        SimulationInfo info = loader.loadFile(preset.source());
                         view.getController().applySimulationInfo(info);
+                        view.setTraceMode(loader.isTraceMode(), loader.getTracePointSize());
                     } catch (Exception failure) {
                         failure.printStackTrace(System.err);
                         javax.swing.JOptionPane.showMessageDialog(this,
@@ -80,6 +82,10 @@ public class MainGuiWindow extends javax.swing.JFrame {
 
     public MainGuiView getView() {
         return view;
+    }
+
+    public void setTraceMode(boolean enabled, int pointSize) {
+        view.setTraceMode(enabled, pointSize);
     }
 
     /** This method is called from within the constructor to
@@ -308,6 +314,7 @@ public class MainGuiWindow extends javax.swing.JFrame {
             try {
                 SimulationInfo newSimInfo = loader.loadFile(file);
                 view.getController().applySimulationInfo(newSimInfo);
+                view.setTraceMode(loader.isTraceMode(), loader.getTracePointSize());
             } catch (Exception ex) {
                 ex.printStackTrace(System.err);
             }
@@ -348,6 +355,7 @@ public class MainGuiWindow extends javax.swing.JFrame {
 
     private void mnuItmReloadDefaultSettingsActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_mnuItmReloadDefaultSettingsActionPerformed
         view.getController().applySimulationInfo(Main.getDefaultSimulationInfo());
+        view.setTraceMode(false, 2);
     }//GEN-LAST:event_mnuItmReloadDefaultSettingsActionPerformed
 
     private void mnuItmBoltzmannWebpageActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_mnuItmBoltzmannWebpageActionPerformed
@@ -364,11 +372,11 @@ public class MainGuiWindow extends javax.swing.JFrame {
 
     private void coloringChanged() {
         if (mnuRadNormalColor.isSelected()) {
-            view.setParticleColorMode(ColorMode.NORMAL_COLORING);
+            view.setParticleColorMode(ParticleColorMode.NORMAL_COLORING);
         } else if (mnuRadSpeedColor.isSelected()) {
-            view.setParticleColorMode(ColorMode.COLOR_BY_SPEED);
+            view.setParticleColorMode(ParticleColorMode.COLOR_BY_SPEED);
         } else if (mnuRadKEColor.isSelected()) {
-            view.setParticleColorMode(ColorMode.COLOR_BY_KE);
+            view.setParticleColorMode(ParticleColorMode.COLOR_BY_KE);
         }
     }
     

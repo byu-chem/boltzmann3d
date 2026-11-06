@@ -153,6 +153,14 @@ public class Load
         return loadNewSetFile(reader);
     }
 
+    public boolean isTraceMode() {
+        return dummyMain.traceMode;
+    }
+
+    public int getTracePointSize() {
+        return dummyMain.tracePointSize;
+    }
+
 	private SimulationInfo loadNewSetFile(BufferedReader fileIn)
 	throws IOException, ParseException {
             

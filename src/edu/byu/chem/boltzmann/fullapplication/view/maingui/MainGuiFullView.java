@@ -36,9 +36,9 @@ import edu.byu.chem.boltzmann.utils.Units.Time;
 import edu.byu.chem.boltzmann.utils.data.ParticleType;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo;
 import edu.byu.chem.boltzmann.view.maingui.MainGuiController;
-import edu.byu.chem.boltzmann.view.maingui.components.GLPanel;
-import edu.byu.chem.boltzmann.view.maingui.components.GLPanel.ColorMode;
-import edu.byu.chem.boltzmann.view.maingui.components.GLPanel.ParticleColorer;
+import edu.byu.chem.boltzmann.view.render.ParticleColorMode;
+import edu.byu.chem.boltzmann.view.render.ParticleColorResolver;
+import edu.byu.chem.boltzmann.view.render.lwjgl.GLPanel;
 import edu.byu.chem.boltzmann.view.maingui.components.PlayPauseButton;
 import edu.byu.chem.boltzmann.view.maingui.components.speedspinner.SpeedSpinner;
 import edu.byu.chem.boltzmann.view.maingui.components.statistics.StatisticReadout;
@@ -99,13 +99,14 @@ public class MainGuiFullView extends
 
     private MainGuiController controller;
     
-    private ColorMode colorMode;
+    private ParticleColorMode colorMode;
     
-    private ParticleColorer defaultSpeedColorer = null;
-    private ParticleColorer defaultKEColorer = null;
+    private ParticleColorResolver defaultSpeedColorer = null;
+    private ParticleColorResolver defaultKEColorer = null;
     
     private SpeedSpinner speedSpinner = new SpeedSpinner();
     private PlayPauseButton playButton = new PlayPauseButton(false);
+    private final javax.swing.JButton btnStartPiston = new javax.swing.JButton("Start piston");
     private UnitReadout<Time> txtFldSimTime = new UnitReadout<Time>(0.0, Time.SECOND, EnumSet.allOf(Time.class));
 
     /** Creates new form ViewImplementation */
@@ -119,6 +120,15 @@ public class MainGuiFullView extends
         pnlControls.add(txtFldSimTime, 0);
         pnlControls.add(playButton, 3);
         pnlControls.add(speedSpinner, 6);
+        btnStartPiston.setName("startPiston");
+        btnStartPiston.setToolTipText("Move the piston to its selected position.");
+        btnStartPiston.setVisible(false);
+        btnStartPiston.addActionListener(event -> {
+            if (!controller.startPiston()) {
+                controller.showPistonControls();
+            }
+        });
+        pnlControls.add(btnStartPiston, 5);
         javax.swing.JButton particles = new javax.swing.JButton("Particles & temperature…");
         particles.setName("particleSettings");
         particles.addActionListener(event -> controller.showParticleSettings());
@@ -528,6 +538,7 @@ public class MainGuiFullView extends
     @Override
     public void setSimulationInfo(SimulationInfo simulationInfo) {
         this.simulationInfo = simulationInfo;
+        btnStartPiston.setVisible(simulationInfo.isPiston());
         currentFrame = null;
         frozenHistogramRange = null;
         frozenHistogramStatistic = null;
@@ -545,10 +556,16 @@ public class MainGuiFullView extends
 
         rescaleArena();
         validate();
+        pnlControls.revalidate();
+        pnlControls.repaint();
+    }
+
+    public void setTraceMode(boolean enabled, int pointSize) {
+        glPanel.setTraceMode(enabled, pointSize);
     }
     
     private void setupDefaultColorers() {
-        defaultSpeedColorer = new ParticleColorer() {
+        defaultSpeedColorer = new ParticleColorResolver() {
             private final double maxSpeed = 2.5 * InstantaneousSpeed.averageVelocity(
                     simulationInfo, 
                     new HashSet<ParticleType>(simulationInfo.getParticleTypes()), 
@@ -562,7 +579,7 @@ public class MainGuiFullView extends
             }            
         };
         
-        defaultKEColorer = new ParticleColorer() {
+        defaultKEColorer = new ParticleColorResolver() {
             private final double maxKE = 2.5 * KineticEnergy.averageKineticEnergy(
                     simulationInfo, 
                     new HashSet<ParticleType>(simulationInfo.getParticleTypes()), 
@@ -899,25 +916,25 @@ public class MainGuiFullView extends
         }
     }
     
-    protected void setParticleColorMode(ColorMode colorMode) {
+    protected void setParticleColorMode(ParticleColorMode colorMode) {
         this.colorMode = colorMode;
-        setParticleColorer();        
+        applyParticleColorMode();
     }
     
-    private void setParticleColorer() {
+    private void applyParticleColorMode() {
         switch (colorMode) {
             case NORMAL_COLORING:
-                glPanel.setParticleColorer(null);
+                glPanel.setParticleColorResolver(null);
                 break;
             case COLOR_BY_SPEED:
-                glPanel.setParticleColorer(getSpeedColorer());
+                glPanel.setParticleColorResolver(getSpeedColorer());
                 break;
             case COLOR_BY_KE:
-                glPanel.setParticleColorer(getKEColorer());
+                glPanel.setParticleColorResolver(getKEColorer());
         }
     }
     
-    private ParticleColorer getSpeedColorer() {
+    private ParticleColorResolver getSpeedColorer() {
         return defaultSpeedColorer;
     }
 	
@@ -932,7 +949,7 @@ public class MainGuiFullView extends
         return hue;
     }
     
-    private ParticleColorer getKEColorer() {
+    private ParticleColorResolver getKEColorer() {
         return defaultKEColorer;
     }
     
