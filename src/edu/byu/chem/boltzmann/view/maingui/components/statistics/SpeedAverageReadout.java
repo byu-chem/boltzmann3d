@@ -67,7 +67,7 @@ public final class SpeedAverageReadout extends JPanel {
     }
 
     private String format(double value) {
-        return Double.isFinite(value) ? numberFormat.format(value) + " m/s" : "—";
+        return Double.isNaN(value) || Double.isInfinite(value) ? "--" : numberFormat.format(value) + " m/s";
     }
 
     private static JTextField createValueField(Color outline) {
