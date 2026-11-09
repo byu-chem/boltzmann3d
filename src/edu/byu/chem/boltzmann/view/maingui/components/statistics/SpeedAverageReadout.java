@@ -16,32 +16,36 @@ package edu.byu.chem.boltzmann.view.maingui.components.statistics;
 
 import edu.byu.chem.boltzmann.model.statistics.InstantaneousSpeed;
 import edu.byu.chem.boltzmann.utils.Units;
+import java.awt.Component;
 import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
+import java.awt.GridLayout;
 import java.awt.Insets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.Locale;
 import javax.swing.BorderFactory;
+import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.SwingConstants;
 import javax.swing.JTextField;
 
 /** Shows predicted and measured speed averages beneath the speed histogram. */
 public final class SpeedAverageReadout extends JPanel {
     private final JLabel averageLabel = new JLabel("Average:");
+    private final JLabel predictedLabel = new JLabel("Predicted:");
     private final JTextField predictedValue = createValueField(new Color(255, 153, 0));
     private final JTextField averageValue = createValueField(new Color(0, 170, 0));
     private final DecimalFormat numberFormat =
             new DecimalFormat("0.0", DecimalFormatSymbols.getInstance(Locale.US));
 
     public SpeedAverageReadout() {
-        setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+        setLayout(new GridLayout(1, 2, 8, 0));
         setAlignmentX(LEFT_ALIGNMENT);
-        add(createRow("Predicted:", predictedValue));
-        add(createRow(averageLabel, averageValue));
+        add(createColumn(averageLabel, averageValue));
+        add(createColumn(predictedLabel, predictedValue));
     }
 
     public void update(InstantaneousSpeed statistic, boolean cumulative, boolean width) {
@@ -72,7 +76,7 @@ public final class SpeedAverageReadout extends JPanel {
     }
 
     private static JTextField createValueField(Color outline) {
-        JTextField field = new JTextField(9);
+        JTextField field = new JTextField(10);
         field.setEditable(false);
         field.setHorizontalAlignment(JTextField.RIGHT);
         field.setBorder(BorderFactory.createLineBorder(outline, 2));
@@ -85,16 +89,21 @@ public final class SpeedAverageReadout extends JPanel {
         return field;
     }
 
-    private static JPanel createRow(String labelText, JTextField value) {
-        return createRow(new JLabel(labelText), value);
-    }
+    private static JPanel createColumn(JLabel label, JTextField value) {
+        JPanel column = new JPanel();
+        column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
 
-    private static JPanel createRow(JLabel label, JTextField value) {
-        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 5));
-        row.setAlignmentX(LEFT_ALIGNMENT);
-        label.setPreferredSize(new Dimension(84, label.getPreferredSize().height));
-        row.add(label);
-        row.add(value);
-        return row;
+        label.setHorizontalAlignment(SwingConstants.CENTER);
+        label.setAlignmentX(Component.CENTER_ALIGNMENT);
+        label.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+                label.getPreferredSize().height));
+        value.setAlignmentX(Component.CENTER_ALIGNMENT);
+        value.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+                value.getPreferredSize().height));
+
+        column.add(label);
+        column.add(Box.createVerticalStrut(3));
+        column.add(value);
+        return column;
     }
 }
