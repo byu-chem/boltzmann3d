@@ -19,6 +19,7 @@ import edu.byu.chem.boltzmann.utils.Units;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Insets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.Locale;
@@ -75,6 +76,12 @@ public final class SpeedAverageReadout extends JPanel {
         field.setEditable(false);
         field.setHorizontalAlignment(JTextField.RIGHT);
         field.setBorder(BorderFactory.createLineBorder(outline, 2));
+        field.setMargin(new Insets(3, 4, 3, 4));
+        Dimension preferredSize = field.getPreferredSize();
+        int height = Math.max(30, preferredSize.height + 8);
+        Dimension readoutSize = new Dimension(preferredSize.width, height);
+        field.setPreferredSize(readoutSize);
+        field.setMinimumSize(readoutSize);
         return field;
     }
 
@@ -83,7 +90,7 @@ public final class SpeedAverageReadout extends JPanel {
     }
 
     private static JPanel createRow(JLabel label, JTextField value) {
-        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 3));
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 5));
         row.setAlignmentX(LEFT_ALIGNMENT);
         label.setPreferredSize(new Dimension(84, label.getPreferredSize().height));
         row.add(label);
