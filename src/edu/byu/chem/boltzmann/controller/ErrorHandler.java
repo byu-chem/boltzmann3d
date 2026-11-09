@@ -19,6 +19,7 @@ package edu.byu.chem.boltzmann.controller;
 
 import edu.byu.chem.boltzmann.model.physics.Physics;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo;
+import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.text.DecimalFormat;
@@ -26,7 +27,9 @@ import java.text.NumberFormat;
 import java.util.Arrays;
 import java.util.Locale;
 import javax.swing.JOptionPane;
+import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
+import javax.swing.JTextArea;
 
 public class ErrorHandler {
 
@@ -78,7 +81,16 @@ public class ErrorHandler {
             SwingUtilities.invokeAndWait(new Runnable() {
                 @Override
                 public void run() {
-                    JOptionPane.showMessageDialog(null, "The following error has occured:\n" + error,
+                    JTextArea details = new JTextArea(
+                            "The following error has occurred:\n" + error, 10, 72);
+                    details.setEditable(false);
+                    details.setLineWrap(true);
+                    details.setWrapStyleWord(false);
+                    details.setCaretPosition(0);
+
+                    JScrollPane scrollPane = new JScrollPane(details);
+                    scrollPane.setPreferredSize(new Dimension(640, 240));
+                    JOptionPane.showMessageDialog(null, scrollPane,
                             "Boltzmann 3D", JOptionPane.ERROR_MESSAGE);
                 }
             });       

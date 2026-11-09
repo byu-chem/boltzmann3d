@@ -44,6 +44,7 @@ import edu.byu.chem.boltzmann.view.maingui.components.speedspinner.SpeedSpinner;
 import edu.byu.chem.boltzmann.view.maingui.components.statistics.StatisticReadout;
 import edu.byu.chem.boltzmann.view.maingui.components.statistics.StatPanel;
 import edu.byu.chem.boltzmann.view.maingui.components.statistics.StatisticReadoutSingle;
+import edu.byu.chem.boltzmann.view.maingui.components.statistics.SpeedAverageReadout;
 import edu.byu.chem.boltzmann.view.maingui.components.textfields.UnitReadout;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -71,6 +72,7 @@ public class MainGuiFullView extends
 
     private Map<StatisticID, StatisticReadout> statisticReadouts = 
             new EnumMap<StatisticID, StatisticReadout>(StatisticID.class);
+    private final SpeedAverageReadout speedAverageReadout = new SpeedAverageReadout();
     private static final Comparator<Object> TO_STRING_COMPARATOR = new Comparator<Object>() {
         @Override
         public int compare(Object o1, Object o2) {
@@ -350,6 +352,8 @@ public class MainGuiFullView extends
         pnlActivePlot.add(pnlPlotHolder);
 
         pnlPlotReadouts.setLayout(new javax.swing.BoxLayout(pnlPlotReadouts, javax.swing.BoxLayout.PAGE_AXIS));
+        speedAverageReadout.setVisible(false);
+        pnlPlotReadouts.add(speedAverageReadout);
         pnlActivePlot.add(pnlPlotReadouts);
 
         pnlStats.add(pnlActivePlot);
@@ -445,6 +449,7 @@ public class MainGuiFullView extends
             }
             decidePlotType();
             updateFrozenHistogramRange();
+            updateSpeedAverageReadoutVisibility(null);
             return;
         }
 
@@ -746,6 +751,10 @@ public class MainGuiFullView extends
                 Statistic statistic = controller.getStatistic(selectedTypes, statisticID);
                 StatisticReadout readoutForStatistic = statisticReadouts.get(statisticID);
                 readoutForStatistic.update(statistic, chkBoxCumulative.isSelected(), chkBoxWidth.isSelected());
+                if (statisticID == StatisticID.INSTANTANEOUS_SPEED) {
+                    speedAverageReadout.update((InstantaneousSpeed) statistic,
+                            chkBoxCumulative.isSelected(), chkBoxWidth.isSelected());
+                }
             }
         } else {
             plotPanel.clearPlot();
@@ -850,6 +859,22 @@ public class MainGuiFullView extends
             decidePlotType();
         }
         updateFrozenHistogramRange();
+        updateSpeedAverageReadoutVisibility(selectedPlot);
+    }
+
+    private void updateSpeedAverageReadoutVisibility(StatisticID selectedPlot) {
+        Set<ParticleType> selectedTypes = getSelectedTypes();
+        boolean showSelectedSpeed = selectedTypes != null
+                && selectedPlot == StatisticID.INSTANTANEOUS_SPEED;
+        speedAverageReadout.setVisible(showSelectedSpeed);
+
+        StatisticReadout speedReadout = statisticReadouts.get(StatisticID.INSTANTANEOUS_SPEED);
+        if (speedReadout != null) {
+            boolean speedAvailable = selectedTypes != null && simulationInfo != null
+                    && simulationInfo.getStatistics(selectedTypes)
+                            .contains(StatisticID.INSTANTANEOUS_SPEED);
+            ((javax.swing.JPanel) speedReadout).setVisible(speedAvailable && !showSelectedSpeed);
+        }
     }
 
     private void updateFrozenHistogramRange() {
