@@ -54,7 +54,8 @@
 
 	<target name="compile" depends="init" description="compile the source code">
 		<javac srcdir="${src}" 
-				target="1.6"
+				source="1.8"
+				target="1.8"
 				classpathref="lib-classpath" 
 				destdir="${bin}" 
 				debug="false" 
@@ -73,6 +74,8 @@
 	
 	<target name="compile-utils" depends="init-utils" description="compile the source code for the distribution utilities">
 		<javac srcdir="${util-src}" 
+				source="1.8"
+				target="1.8"
 				destdir="${util-bin}" 
 				debug="false"
 				excludes="edu/byu/chem/boltzmann/model/statistics/WallPressure.java,edu/byu/chem/boltzmann/model/statistics/VirialPressure.java, edu/byu/chem/boltzmann/modules/idealgas*/**"

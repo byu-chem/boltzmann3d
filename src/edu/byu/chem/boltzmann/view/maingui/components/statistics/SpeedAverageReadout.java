@@ -43,8 +43,8 @@ public final class SpeedAverageReadout extends JPanel {
         add(createRow(averageLabel, averageValue));
     }
 
-    @SuppressWarnings("rawtypes")
-    public void update(StatisticWithDistribution statistic, boolean cumulative, boolean width) {
+    public void update(StatisticWithDistribution<Units.Velocity> statistic,
+            boolean cumulative, boolean width) {
         Units.Velocity unit = Units.Velocity.METER_PER_SECOND;
         double predicted;
         double measured;

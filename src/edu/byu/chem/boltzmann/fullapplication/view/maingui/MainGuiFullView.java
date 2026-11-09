@@ -650,7 +650,7 @@ public class MainGuiFullView extends
                 StatisticReadout readoutForStatistic = statisticReadouts.get(statisticID);
                 readoutForStatistic.update(statistic, chkBoxCumulative.isSelected(), chkBoxWidth.isSelected());
                 if (statisticID == StatisticID.INSTANTANEOUS_SPEED) {
-                    speedAverageReadout.update((StatisticWithDistribution) statistic,
+                    speedAverageReadout.update((InstantaneousSpeed) statistic,
                             chkBoxCumulative.isSelected(), chkBoxWidth.isSelected());
                 }
             }
