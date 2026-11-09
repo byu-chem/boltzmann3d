@@ -18,16 +18,18 @@ jobs:
         include:
           - os: macos-15
             arch: aarch64
+            distribution: temurin
             artifact: macos-arm64
-          - os: windows-11-arm
-            arch: aarch64
-            artifact: windows-arm64
+          - os: windows-2022
+            arch: x64
+            distribution: temurin
+            artifact: windows-x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: ${{ matrix.distribution }}
           java-version: '25'
           architecture: ${{ matrix.arch }}
       - name: Install Ant on macOS

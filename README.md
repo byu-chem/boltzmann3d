@@ -9,7 +9,7 @@ The Swing application's graphics backend uses LWJGL 3.4.2 with the
 LWJGLX AWT surface library 0.2.5. The initial targets are:
 
 - Apple Silicon macOS, using an ARM64 JDK and LWJGL's macOS ARM64 natives.
-- Windows 11 ARM, using an ARM64 JDK and LWJGL's Windows ARM64 natives.
+- Windows 10/11 x64, using an x64 JDK and LWJGL's Windows x64 natives.
 
 The application uses an OpenGL 3.2 core-profile renderer. It supports particles,
 arena walls, dividers, divider openings, pistons, periodic images, and
@@ -35,8 +35,8 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 25 -a arm64)
 export PATH="$JAVA_HOME/bin:$PATH"
 ```
 
-On Windows ARM, install the ARM64 Temurin 25 JDK and Apache Ant, set JAVA_HOME
-to the JDK directory, and put their bin directories on PATH.
+On Windows, install the x64 Temurin 25 JDK and Apache Ant, set JAVA_HOME to the
+JDK directory, and put their bin directories on PATH.
 
 ## Build and run
 
@@ -71,7 +71,7 @@ finite positions, advancing time and kinetic-energy conservation over 20 frames.
 These are loading tests, not save/load round-trip tests.
 
 GitHub Actions builds and runs these checks with Java 25 on macOS ARM64 and
-Windows ARM64, then uploads each dist directory. Hosted builds do not validate
+Windows x64, then uploads each dist directory. Hosted builds do not validate
 interactive graphics.
 
 With a graphical desktop and working OpenGL driver, run `ant test-render-core`
@@ -116,8 +116,8 @@ runtime, resources, native library loading, settings and physics.
 using the bundled runtime before building the installer. Run this from a
 normal graphical desktop terminal.
 
-On Windows ARM64, set JAVA_HOME to an ARM64 JDK 25 installation and put Ant and
-WiX 5 on PATH. One way to install WiX with the .NET SDK is:
+On Windows x64, set JAVA_HOME to a JDK 25 installation and put Ant and WiX 5
+on PATH. One way to install WiX with the .NET SDK is:
 
 ```powershell
 dotnet tool install --global wix --version 5.0.2
@@ -134,7 +134,7 @@ Outputs:
 
 Packages must be built on their target operating system. GitHub Actions builds
 both installers and uploads them as `Boltzmann3D-macos-arm64-installer` and
-`Boltzmann3D-windows-arm64-installer` artifacts. It verifies each bundled runtime
+`Boltzmann3D-windows-x64-installer` artifacts. It verifies each bundled runtime
 and checks packaged Mac graphics. The Windows installer is also installed into
 a temporary directory, checked with its installed runtime, then uninstalled.
 Installer archives preserve the permissions

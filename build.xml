@@ -50,11 +50,11 @@
         <condition property="native.classifier" value="natives-macos-arm64">
             <and><os family="mac"/><or><os arch="aarch64"/><os arch="arm64"/></or></and>
         </condition>
-        <condition property="native.classifier" value="natives-windows-arm64">
-            <and><os family="windows"/><or><os arch="aarch64"/><os arch="arm64"/></or></and>
+        <condition property="native.classifier" value="natives-windows">
+            <and><os family="windows"/><or><os arch="amd64"/><os arch="x86_64"/></or></and>
         </condition>
         <fail unless="native.classifier"
-              message="Native builds require an ARM64 JDK on Apple Silicon macOS or Windows. Detected ${os.name}/${os.arch}."/>
+              message="Native builds require an ARM64 JDK on Apple Silicon macOS or an x64 JDK on Windows 10/11. Detected ${os.name}/${os.arch}."/>
     </target>
 
     <target name="native-deps" depends="deps,platform" description="Fetch natives for the current target">
