@@ -354,7 +354,6 @@ public class MainGuiFullView extends
         pnlPlotReadouts.setLayout(new javax.swing.BoxLayout(pnlPlotReadouts, javax.swing.BoxLayout.PAGE_AXIS));
         speedAverageReadout.setVisible(false);
         pnlPlotReadouts.add(speedAverageReadout);
-        pnlActivePlot.add(pnlPlotReadouts);
 
         pnlStats.add(pnlActivePlot);
 
@@ -385,6 +384,7 @@ public class MainGuiFullView extends
         pnlStatOptions.add(chkBoxHistory);
 
         pnlStats.add(pnlStatOptions);
+        pnlStats.add(pnlPlotReadouts);
 
         pnlTemperatureReadout.setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 3));
         lblTemperature.setText("Temp:");
