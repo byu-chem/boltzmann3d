@@ -1,0 +1,4 @@
+bin*
+*.py[cod]
+*.egg-info/
+.vscode/settings.json
