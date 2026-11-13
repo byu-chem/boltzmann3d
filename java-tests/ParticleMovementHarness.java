@@ -2,6 +2,7 @@ import edu.byu.chem.boltzmann.model.physics.Particle1D;
 import edu.byu.chem.boltzmann.model.physics.Particle2D;
 import edu.byu.chem.boltzmann.model.physics.Particle3D;
 import edu.byu.chem.boltzmann.model.physics.Collision;
+import edu.byu.chem.boltzmann.model.physics.Calendar;
 import edu.byu.chem.boltzmann.model.physics.EventInfo;
 import edu.byu.chem.boltzmann.utils.data.ParticleType;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo;
@@ -33,6 +34,7 @@ public final class ParticleMovementHarness {
         testRepeatedMoves(simulationInfo, testType);
         testFractionalValues(simulationInfo, testType);
         testOneDimensionalElasticCollision(simulationInfo);
+        testOneDimensionalCollisionPrediction(simulationInfo);
 
         System.out.println("All Java particle movement checks passed.");
     }
@@ -129,6 +131,53 @@ public final class ParticleMovementHarness {
         System.out.printf(Locale.ROOT,
                 "1D elastic collision PASS: positions=(%.17g, %.17g) velocities=(%.17g, %.17g)%n",
                 first.getX(), second.getX(), first.getXVel(), second.getXVel());
+    }
+
+    private static void testOneDimensionalCollisionPrediction(
+            SimulationInfo simulationInfo) {
+        ParticleType particleType = new ParticleType(1.0, 1.0, Color.RED, "test");
+        Particle1D approachingFirst = new Particle1D(
+                new double[]{0.0}, new double[]{1.0}, 0.0,
+                particleType, simulationInfo);
+        Particle1D approachingSecond = new Particle1D(
+                new double[]{5.0}, new double[]{-1.0}, 0.0,
+                particleType, simulationInfo);
+        EventInfo predicted = new EventInfo(
+                Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+
+        approachingFirst.predCol(approachingSecond, null, predicted);
+        assertClose("approaching collision time", predicted.colTime, 1.5);
+
+        Particle1D recedingFirst = new Particle1D(
+                new double[]{0.0}, new double[]{-1.0}, 0.0,
+                particleType, simulationInfo);
+        Particle1D recedingSecond = new Particle1D(
+                new double[]{5.0}, new double[]{1.0}, 0.0,
+                particleType, simulationInfo);
+        EventInfo noCollision = new EventInfo(
+                Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+
+        recedingFirst.predCol(recedingSecond, null, noCollision);
+        if (noCollision.colTime != Calendar.MAXTIME) {
+            throw new AssertionError(
+                    "receding particles expected no collision but got "
+                    + noCollision.colTime);
+        }
+
+        Particle1D laterState = new Particle1D(
+                new double[]{1.0}, new double[]{1.0}, 1.0,
+                particleType, simulationInfo);
+        Particle1D earlierState = new Particle1D(
+                new double[]{5.0}, new double[]{-1.0}, 0.0,
+                particleType, simulationInfo);
+        EventInfo asynchronousPrediction = new EventInfo(
+                Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+
+        laterState.predCol(earlierState, null, asynchronousPrediction);
+        assertClose("asynchronous collision time", asynchronousPrediction.colTime, 1.5);
+
+        System.out.println(
+                "1D collision prediction PASS: approaching=1.5 receding=no collision asynchronous=1.5");
     }
 
     private static void assertClose(String label, double actual, double expected) {

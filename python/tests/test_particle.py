@@ -1,6 +1,6 @@
 import unittest
 
-from boltzmann3d.physics import Particle
+from boltzmann3d.physics import NO_COLLISION_TIME, Particle
 
 
 class ParticleMovementTests(unittest.TestCase):
@@ -80,6 +80,45 @@ class ParticleMovementTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             first.collide_1d(second, collision_time=1.0)
+
+    def test_predicts_approaching_particle_collision(self) -> None:
+        first = Particle(position=(0.0,), velocity=(1.0,), radius=1.0)
+        second = Particle(position=(5.0,), velocity=(-1.0,), radius=1.0)
+
+        collision_time = first.predict_collision_time_1d(second)
+
+        self.assertEqual(collision_time, 1.5)
+        self.assertEqual(first.position, (0.0,))
+        self.assertEqual(second.position, (5.0,))
+
+    def test_does_not_predict_particles_moving_apart(self) -> None:
+        first = Particle(position=(0.0,), velocity=(-1.0,), radius=1.0)
+        second = Particle(position=(5.0,), velocity=(1.0,), radius=1.0)
+
+        self.assertEqual(
+            first.predict_collision_time_1d(second), NO_COLLISION_TIME
+        )
+
+    def test_does_not_predict_collision_with_no_relative_motion(self) -> None:
+        first = Particle(position=(0.0,), velocity=(2.0,), radius=1.0)
+        second = Particle(position=(5.0,), velocity=(2.0,), radius=1.0)
+
+        self.assertEqual(
+            first.predict_collision_time_1d(second), NO_COLLISION_TIME
+        )
+
+    def test_prediction_aligns_particles_at_their_latest_state_time(self) -> None:
+        first = Particle(position=(1.0,), velocity=(1.0,), time=1.0, radius=1.0)
+        second = Particle(position=(5.0,), velocity=(-1.0,), time=0.0, radius=1.0)
+
+        self.assertEqual(first.predict_collision_time_1d(second), 1.5)
+
+    def test_collision_prediction_rejects_other_dimensions(self) -> None:
+        first = Particle(position=(0.0, 0.0), velocity=(1.0, 0.0))
+        second = Particle(position=(1.0,), velocity=(-1.0,))
+
+        with self.assertRaises(ValueError):
+            first.predict_collision_time_1d(second)
 
     def test_rejects_different_position_and_velocity_dimensions(self) -> None:
         with self.assertRaises(ValueError):
