@@ -1,0 +1,507 @@
+"""Small event-driven simulation for particle and arena-boundary physics."""
+
+from dataclasses import dataclass
+from itertools import product
+import math
+from typing import Literal
+
+from .particle import NO_COLLISION_TIME, Particle
+
+
+BoundaryMode = Literal["reflecting", "periodic", "divided"]
+EventKind = Literal["particle", "wall", "wrap", "divider", "edge"]
+
+
+@dataclass(frozen=True)
+class SimulationEvent:
+    """A predicted collision event in a :class:`Simulation`."""
+
+    time: float
+    kind: EventKind
+    particle_indices: tuple[int, ...]
+    axis: int | None = None
+    image_offset: tuple[float, ...] | None = None
+    wrapped_coordinate: float | None = None
+    side: str | None = None
+    obstacle_position: tuple[float, ...] | None = None
+
+
+class Simulation:
+    """Advance particles by repeatedly processing the earliest collision.
+
+    ``boundary_mode`` may be ``"reflecting"``, ``"periodic"``, or
+    ``"divided"``. A divided arena may include a ``hole_diameter`` in 2D/3D.
+    Divider dimensions use the same units as particle coordinates and radii.
+
+    It recomputes all candidate events after each collision, which is simple
+    and suitable for validating the physics before replacing it with an
+    optimized event calendar.
+    """
+
+    def __init__(
+        self,
+        particles: list[Particle],
+        arena_sizes: tuple[float, ...],
+        boundary_mode: BoundaryMode = "reflecting",
+        divider_half_width: float = 0.0,
+        hole_diameter: float | None = None,
+        hole_open: bool = True,
+    ):
+        self.particles = list(particles)
+        if boundary_mode not in ("reflecting", "periodic", "divided"):
+            raise ValueError("Boundary mode must be 'reflecting', 'periodic', or 'divided'")
+        self.boundary_mode = boundary_mode
+        self.divider_half_width = float(divider_half_width)
+        if not math.isfinite(self.divider_half_width) or self.divider_half_width < 0.0:
+            raise ValueError("Divider half-width must be finite and nonnegative")
+        self.hole_diameter = None if hole_diameter is None else float(hole_diameter)
+        if not isinstance(hole_open, bool):
+            raise ValueError("hole_open must be a boolean")
+        self.hole_open = hole_open
+        if self.hole_diameter is not None:
+            if boundary_mode != "divided":
+                raise ValueError("A divider hole requires boundary_mode='divided'")
+            if not math.isfinite(self.hole_diameter) or self.hole_diameter <= 0.0:
+                raise ValueError("Hole diameter must be finite and positive")
+        if not self.particles:
+            if not arena_sizes:
+                raise ValueError("Arena dimensions are required, even for an empty simulation")
+            self.arena_sizes = tuple(float(size) for size in arena_sizes)
+            if len(self.arena_sizes) not in (1, 2, 3) or any(
+                size <= 0 for size in self.arena_sizes
+            ):
+                raise ValueError("Arena must have one, two, or three positive dimensions")
+            self._validate_hole_size(len(self.arena_sizes))
+            self.current_time = 0.0
+            return
+
+        dimension = len(self.particles[0].position)
+        if dimension not in (1, 2, 3):
+            raise ValueError("Simulation supports one, two, or three dimensions")
+        if any(len(particle.position) != dimension for particle in self.particles):
+            raise ValueError("All particles must have the same dimension")
+        if len(arena_sizes) != dimension:
+            raise ValueError("Arena size count must match the particle dimension")
+
+        self.arena_sizes = tuple(float(size) for size in arena_sizes)
+        if any(size <= 0.0 for size in self.arena_sizes):
+            raise ValueError("Arena dimensions must be positive")
+        self._validate_hole_size(dimension)
+        self.current_time = max(particle.time for particle in self.particles)
+        for particle in self.particles:
+            if particle.time < self.current_time:
+                particle.move_to_time(self.current_time)
+        if self.boundary_mode == "reflecting":
+            for particle in self.particles:
+                particle._validate_wall_arena(self.arena_sizes)
+        elif self.boundary_mode == "periodic":
+            for particle in self.particles:
+                if any(size <= 2.0 * particle.radius for size in self.arena_sizes):
+                    raise ValueError(
+                        "Periodic arena must be wider than each particle diameter"
+                    )
+                particle.position = tuple(
+                    coordinate % size
+                    for coordinate, size in zip(particle.position, self.arena_sizes)
+                )
+        else:
+            for particle in self.particles:
+                if self.hole_diameter is None:
+                    particle._validate_divider(self.arena_sizes, self.divider_half_width)
+                elif not self.hole_open:
+                    particle._validate_divider(self.arena_sizes, self.divider_half_width)
+                else:
+                    self._validate_hole_particle(particle)
+
+    def set_hole_open(self, is_open: bool) -> None:
+        """Change the hole state before predicting the next simulation events."""
+        if self.hole_diameter is None:
+            raise ValueError("This simulation has no divider hole to open or close")
+        if not isinstance(is_open, bool):
+            raise ValueError("Hole state must be a boolean")
+        if is_open == self.hole_open:
+            return
+        if not is_open:
+            divider_center = self.arena_sizes[0] / 2.0
+            for particle in self.particles:
+                overlap_distance = self.divider_half_width + particle.radius
+                if abs(particle.position[0] - divider_center) < overlap_distance:
+                    raise ValueError(
+                        "Cannot close the hole while a particle overlaps the divider"
+                    )
+        self.hole_open = is_open
+
+    def _validate_hole_size(self, dimension: int) -> None:
+        if self.hole_diameter is None:
+            return
+        if dimension not in (2, 3):
+            raise ValueError("A divider hole is supported only in 2D or 3D")
+        transverse_sizes = self.arena_sizes[1:dimension]
+        if any(self.hole_diameter >= size for size in transverse_sizes):
+            raise ValueError("Hole diameter must be smaller than each transverse arena size")
+
+    def _hole_center_radius(self, dimension: int) -> float:
+        """Return the Java-style radius used to decide if the divider is crossed."""
+        if self.hole_diameter is None:
+            raise ValueError("This simulation has no divider hole")
+        radius = 0.5 * self.hole_diameter
+        # Java's 2D barrier check uses holeDiameter/2 directly. Its 3D check
+        # uses ArenaInfo.holeRadius, which adds the divider edge radius.
+        if dimension == 3:
+            radius += self.divider_half_width
+        return radius
+
+    def _divider_edge_positions(self) -> tuple[tuple[float, ...], ...]:
+        """Return the fixed point-particle locations lining the hole edge."""
+        if self.hole_diameter is None or not self.hole_open:
+            return ()
+        dimension = len(self.arena_sizes)
+        center = self.arena_sizes[0] / 2.0
+        hole_radius = 0.5 * self.hole_diameter + self.divider_half_width
+        if dimension == 2:
+            middle_y = self.arena_sizes[1] / 2.0
+            return (
+                (center, middle_y + hole_radius),
+                (center, middle_y - hole_radius),
+            )
+
+        edge_radius = self.divider_half_width
+        if edge_radius == 0.0:
+            # A zero-thickness divider has no finite edge-particle size. Use
+            # a modest ring to preserve a usable opening boundary.
+            count = 32
+        else:
+            count = max(1, round(4.0 * math.pi * hole_radius / edge_radius))
+        middle_y = self.arena_sizes[1] / 2.0
+        middle_z = self.arena_sizes[2] / 2.0
+        return tuple(
+            (
+                center,
+                middle_y + hole_radius * math.cos(2.0 * math.pi * index / count),
+                middle_z + hole_radius * math.sin(2.0 * math.pi * index / count),
+            )
+            for index in range(count)
+        )
+
+    def _validate_hole_particle(self, particle: Particle) -> None:
+        sizes = particle._validate_wall_arena(self.arena_sizes)
+        divider_center = sizes[0] / 2.0
+        half_span = self.divider_half_width + particle.radius
+        x = particle.position[0]
+        if abs(x - divider_center) >= half_span:
+            return
+        dimension = len(sizes)
+        transverse = tuple(
+            coordinate - 0.5 * size
+            for coordinate, size in zip(particle.position[1:], sizes[1:])
+        )
+        radial_squared = sum(component * component for component in transverse)
+        hole_radius = self._hole_center_radius(dimension)
+        if radial_squared >= hole_radius * hole_radius:
+            raise ValueError("Particle overlaps the solid part of the divider")
+        contact_distance = particle.radius + self.divider_half_width
+        for edge_position in self._divider_edge_positions():
+            distance_squared = sum(
+                (coordinate - edge_coordinate) ** 2
+                for coordinate, edge_coordinate in zip(particle.position, edge_position)
+            )
+            if distance_squared < contact_distance * contact_distance:
+                raise ValueError("Particle overlaps the divider hole edge")
+
+    def _divider_event_for(self, index: int, particle: Particle) -> SimulationEvent | None:
+        divider_center = self.arena_sizes[0] / 2.0
+        left_limit = divider_center - self.divider_half_width - particle.radius
+        right_limit = divider_center + self.divider_half_width + particle.radius
+        x, x_speed = particle.position[0], particle.velocity[0]
+        if x_speed > 0.0 and x <= left_limit:
+            event_time = particle.time + (left_limit - x) / x_speed
+            side = "left"
+        elif x_speed < 0.0 and x >= right_limit:
+            event_time = particle.time + (right_limit - x) / x_speed
+            side = "right"
+        else:
+            return None
+        if self.hole_diameter is not None and self.hole_open:
+            dimension = len(self.arena_sizes)
+            coordinates = tuple(
+                coordinate + speed * (event_time - particle.time)
+                for coordinate, speed in zip(particle.position, particle.velocity)
+            )
+            transverse = tuple(
+                coordinate - 0.5 * size
+                for coordinate, size in zip(coordinates[1:], self.arena_sizes[1:])
+            )
+            radial_squared = sum(component * component for component in transverse)
+            hole_radius = self._hole_center_radius(dimension)
+            crosses_hole = (
+                radial_squared < hole_radius * hole_radius
+                if dimension == 2
+                else radial_squared <= hole_radius * hole_radius
+            )
+            if crosses_hole:
+                return None
+        return SimulationEvent(event_time, "divider", (index,), side=side)
+
+    @staticmethod
+    def _predict_fixed_sphere_collision(
+        particle: Particle,
+        center: tuple[float, ...],
+        contact_distance: float,
+    ) -> float:
+        displacement = tuple(
+            coordinate - obstacle_coordinate
+            for coordinate, obstacle_coordinate in zip(particle.position, center)
+        )
+        a = sum(speed * speed for speed in particle.velocity)
+        b = sum(
+            coordinate * speed
+            for coordinate, speed in zip(displacement, particle.velocity)
+        )
+        c = sum(coordinate * coordinate for coordinate in displacement) - (
+            contact_distance * contact_distance
+        )
+        if a == 0.0 or b >= 0.0:
+            return NO_COLLISION_TIME
+        discriminant = b * b - a * c
+        if discriminant < 0.0:
+            return NO_COLLISION_TIME
+        elapsed = (-b - math.sqrt(discriminant)) / a
+        return particle.time + elapsed if elapsed >= 0.0 else NO_COLLISION_TIME
+
+    def _collision_is_blocked_by_divider(
+        self, first: Particle, second: Particle, collision_time: float
+    ) -> bool:
+        if self.hole_diameter is None or not self.hole_open:
+            return True
+        first_at_collision = tuple(
+            coordinate + speed * (collision_time - first.time)
+            for coordinate, speed in zip(first.position, first.velocity)
+        )
+        second_at_collision = tuple(
+            coordinate + speed * (collision_time - second.time)
+            for coordinate, speed in zip(second.position, second.velocity)
+        )
+        center_x = self.arena_sizes[0] / 2.0
+        delta_x = second_at_collision[0] - first_at_collision[0]
+        if delta_x == 0.0:
+            return True
+        fraction = (center_x - first_at_collision[0]) / delta_x
+        if not 0.0 <= fraction <= 1.0:
+            return True
+        radial_squared = sum(
+            (
+                first_at_collision[axis]
+                + fraction * (second_at_collision[axis] - first_at_collision[axis])
+                - 0.5 * self.arena_sizes[axis]
+            )
+            ** 2
+            for axis in range(1, len(self.arena_sizes))
+        )
+        hole_radius = self._hole_center_radius(len(self.arena_sizes))
+        if len(self.arena_sizes) == 2:
+            return radial_squared >= hole_radius * hole_radius
+        return radial_squared > hole_radius * hole_radius
+
+    def _reflect_from_fixed_sphere(
+        self,
+        particle: Particle,
+        collision_time: float,
+        center: tuple[float, ...],
+    ) -> None:
+        particle.move_to_time(collision_time)
+        normal = tuple(
+            coordinate - obstacle_coordinate
+            for coordinate, obstacle_coordinate in zip(particle.position, center)
+        )
+        distance = math.sqrt(sum(component * component for component in normal))
+        if distance == 0.0:
+            raise ValueError("Cannot resolve a fixed-edge collision at coincident centers")
+        normal = tuple(component / distance for component in normal)
+        contact_distance = particle.radius + self.divider_half_width
+        particle.position = tuple(
+            obstacle_coordinate + component * contact_distance
+            for obstacle_coordinate, component in zip(center, normal)
+        )
+        normal_speed = sum(
+            speed * component for speed, component in zip(particle.velocity, normal)
+        )
+        particle.velocity = tuple(
+            speed - 2.0 * normal_speed * component
+            for speed, component in zip(particle.velocity, normal)
+        )
+
+    def next_event(self) -> SimulationEvent | None:
+        """Return the earliest predicted event without changing particle state."""
+        candidates: list[SimulationEvent] = []
+
+        for index, particle in enumerate(self.particles):
+            if self.boundary_mode in ("reflecting", "divided"):
+                event_time, axis = particle.predict_wall_collision(self.arena_sizes)
+                if event_time != NO_COLLISION_TIME:
+                    candidates.append(
+                        SimulationEvent(event_time, "wall", (index,), axis)
+                    )
+            if self.boundary_mode == "divided":
+                divider_event = self._divider_event_for(index, particle)
+                if divider_event is not None:
+                    candidates.append(divider_event)
+                if self.hole_diameter is not None and self.hole_open:
+                    for edge_position in self._divider_edge_positions():
+                        edge_time = self._predict_fixed_sphere_collision(
+                            particle,
+                            edge_position,
+                            particle.radius + self.divider_half_width,
+                        )
+                        if edge_time != NO_COLLISION_TIME:
+                            candidates.append(
+                                SimulationEvent(
+                                    edge_time,
+                                    "edge",
+                                    (index,),
+                                    obstacle_position=edge_position,
+                                )
+                            )
+            elif self.boundary_mode == "periodic":
+                event_time, axis, wrapped_coordinate = particle.predict_periodic_wrap(
+                    self.arena_sizes
+                )
+                if event_time != NO_COLLISION_TIME:
+                    candidates.append(
+                        SimulationEvent(
+                            event_time,
+                            "wrap",
+                            (index,),
+                            axis,
+                            wrapped_coordinate=wrapped_coordinate,
+                        )
+                    )
+
+        for first_index, first in enumerate(self.particles):
+            for second_index in range(first_index + 1, len(self.particles)):
+                second = self.particles[second_index]
+                on_opposite_sides = False
+                if self.boundary_mode == "divided":
+                    divider_center = self.arena_sizes[0] / 2.0
+                    on_opposite_sides = (first.position[0] < divider_center) != (
+                        second.position[0] < divider_center
+                    )
+                    if on_opposite_sides and (
+                        self.hole_diameter is None or not self.hole_open
+                    ):
+                        continue
+                if self.boundary_mode in ("reflecting", "divided"):
+                    image_offsets = ((0.0,) * len(self.arena_sizes),)
+                else:
+                    image_offsets = product(
+                        *(
+                            (-size, 0.0, size)
+                            for size in self.arena_sizes
+                        )
+                    )
+                for image_offset in image_offsets:
+                    collision_time = first.predict_collision_time(
+                        second, image_offset=image_offset
+                    )
+                    if collision_time != NO_COLLISION_TIME:
+                        if (
+                            self.boundary_mode == "divided"
+                            and on_opposite_sides
+                            and self._collision_is_blocked_by_divider(
+                                first, second, collision_time
+                            )
+                        ):
+                            continue
+                        candidates.append(
+                            SimulationEvent(
+                                collision_time,
+                                "particle",
+                                (first_index, second_index),
+                                image_offset=tuple(image_offset),
+                            )
+                        )
+
+        if not candidates:
+            return None
+        # Deterministic tie order: particle collisions, wall/divider events,
+        # then periodic wraps; indices and axis break remaining ties.
+        return min(
+            candidates,
+            key=lambda event: (
+                event.time,
+                {"particle": 0, "wall": 1, "divider": 1, "edge": 2, "wrap": 3}[
+                    event.kind
+                ],
+                event.particle_indices,
+                -1 if event.axis is None else event.axis,
+                () if event.image_offset is None else event.image_offset,
+            ),
+        )
+
+    def _process_event(self, event: SimulationEvent) -> None:
+        if event.kind == "particle":
+            first_index, second_index = event.particle_indices
+            self.particles[first_index].collide(
+                self.particles[second_index], event.time, event.image_offset
+            )
+        elif event.kind == "wall":
+            (particle_index,) = event.particle_indices
+            if event.axis is None:
+                raise ValueError("Wall event is missing its axis")
+            self.particles[particle_index].collide_with_wall(
+                event.time, self.arena_sizes, event.axis
+            )
+        elif event.kind == "divider":
+            (particle_index,) = event.particle_indices
+            if event.side is None:
+                raise ValueError("Divider event is missing its side")
+            self.particles[particle_index].collide_with_divider(
+                event.time,
+                self.arena_sizes,
+                event.side,
+                self.divider_half_width,
+            )
+        elif event.kind == "edge":
+            (particle_index,) = event.particle_indices
+            if event.obstacle_position is None:
+                raise ValueError("Edge event is missing its obstacle position")
+            self._reflect_from_fixed_sphere(
+                self.particles[particle_index], event.time, event.obstacle_position
+            )
+        elif event.kind == "wrap":
+            (particle_index,) = event.particle_indices
+            if event.axis is None or event.wrapped_coordinate is None:
+                raise ValueError("Periodic event is missing wrap information")
+            self.particles[particle_index].wrap_periodic(
+                event.time,
+                self.arena_sizes,
+                event.axis,
+                event.wrapped_coordinate,
+            )
+        else:
+            raise ValueError(f"Unknown simulation event kind: {event.kind}")
+        self.current_time = event.time
+
+    def advance_to(self, target_time: float) -> tuple[SimulationEvent, ...]:
+        """Process every event up to ``target_time``, then advance all particles.
+
+        Returns the events processed, in chronological order. The supplied
+        time must not be earlier than the simulation's current time.
+        """
+        target_time = float(target_time)
+        if not math.isfinite(target_time):
+            raise ValueError("Target time must be finite")
+        if target_time < self.current_time:
+            raise ValueError("Cannot advance a simulation to a time in the past")
+
+        processed: list[SimulationEvent] = []
+        while True:
+            event = self.next_event()
+            if event is None or event.time > target_time:
+                break
+            self._process_event(event)
+            processed.append(event)
+
+        for particle in self.particles:
+            particle.move_to_time(target_time)
+        self.current_time = target_time
+        return tuple(processed)

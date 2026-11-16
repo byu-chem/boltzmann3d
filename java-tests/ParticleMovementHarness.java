@@ -42,9 +42,14 @@ public final class ParticleMovementHarness {
         testOneDimensionalCollisionPrediction(simulationInfo);
         testTwoDimensionalParticleCollision();
         testThreeDimensionalParticleCollision();
+        testPeriodicParticleCollisionAcrossBoundary();
         testOneDimensionalWallHandling();
         testTwoDimensionalWallHandling();
         testThreeDimensionalWallHandling();
+        testOneDimensionalDividerHandling();
+        testTwoDimensionalDividerHandling();
+        testThreeDimensionalDividerHandling();
+        testTwoDimensionalDividerHole();
 
         System.out.println("All Java particle movement checks passed.");
     }
@@ -242,6 +247,60 @@ public final class ParticleMovementHarness {
                 second.getXVel(), second.getYVel(), second.getZVel());
     }
 
+    private static void testPeriodicParticleCollisionAcrossBoundary() {
+        ParticleType particleType = new ParticleType(1.0, 1.0, Color.RED, "test");
+        SimulationInfo periodicInfo = createSimulationInfo(
+                particleType, 1, 10.0, 10.0, 10.0,
+                SimulationInfo.ArenaType.PERIODIC_BOUNDARIES);
+        Particle1D first = new Particle1D(
+                new double[]{2.0}, new double[]{-1.0}, 0.0,
+                particleType, periodicInfo);
+        Particle1D second = new Particle1D(
+                new double[]{9.5}, new double[]{1.0}, 0.0,
+                particleType, periodicInfo);
+        EventInfo collision = new EventInfo(Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+
+        first.predCol(second, null, collision);
+        assertClose("periodic collision time", collision.colTime, 0.25);
+        first.collideWith(second, collision);
+        assertClose("periodic first velocity", first.getXVel(), 1.0);
+        assertClose("periodic second velocity", second.getXVel(), -1.0);
+
+        SimulationInfo periodic2DInfo = createSimulationInfo(
+                particleType, 2, 10.0, 10.0, 10.0,
+                SimulationInfo.ArenaType.PERIODIC_BOUNDARIES);
+        Particle2D first2D = new Particle2D(
+                new double[]{2.0, 5.0}, new double[]{-1.0, 0.0}, 0.0,
+                particleType, periodic2DInfo);
+        Particle2D second2D = new Particle2D(
+                new double[]{9.5, 5.0}, new double[]{1.0, 0.0}, 0.0,
+                particleType, periodic2DInfo);
+        EventInfo collision2D = new EventInfo(Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+        first2D.predCol(second2D, null, collision2D);
+        assertClose("2D periodic collision time", collision2D.colTime, 0.25);
+        first2D.collideWith(second2D, collision2D);
+        assertClose("2D periodic first velocity", first2D.getXVel(), 1.0);
+        assertClose("2D periodic second velocity", second2D.getXVel(), -1.0);
+
+        SimulationInfo periodic3DInfo = createSimulationInfo(
+                particleType, 3, 10.0, 10.0, 10.0,
+                SimulationInfo.ArenaType.PERIODIC_BOUNDARIES);
+        Particle3D first3D = new Particle3D(
+                new double[]{2.0, 5.0, 5.0}, new double[]{-1.0, 0.0, 0.0}, 0.0,
+                particleType, periodic3DInfo);
+        Particle3D second3D = new Particle3D(
+                new double[]{9.5, 5.0, 5.0}, new double[]{1.0, 0.0, 0.0}, 0.0,
+                particleType, periodic3DInfo);
+        EventInfo collision3D = new EventInfo(Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+        first3D.predCol(second3D, null, collision3D);
+        assertClose("3D periodic collision time", collision3D.colTime, 0.25);
+        first3D.collideWith(second3D, collision3D);
+        assertClose("3D periodic first velocity", first3D.getXVel(), 1.0);
+        assertClose("3D periodic second velocity", second3D.getXVel(), -1.0);
+        System.out.println(
+                "Periodic image collision PASS in 1D/2D/3D: time=0.25 velocities=(1.0, -1.0)");
+    }
+
     private static void testOneDimensionalWallHandling() {
         ParticleType particleType = new ParticleType(1.0, 1.0, Color.RED, "test");
         SimulationInfo reflectingInfo = createReflectingSimulationInfo(particleType, 1, 10.0, 10.0, 10.0);
@@ -329,19 +388,202 @@ public final class ParticleMovementHarness {
                 "3D wall handling PASS: time=2.0 position=(2.0, 1.0, 8.0) velocity=(0.0, 1.0, 2.0)");
     }
 
+    private static void testOneDimensionalDividerHandling() {
+        ParticleType particleType = new ParticleType(1.0, 1.0, Color.RED, "test");
+        SimulationInfo dividedInfo = createSimulationInfo(
+                particleType, 1, 10.0, 10.0, 10.0,
+                SimulationInfo.ArenaType.DIVIDED_ARENA);
+        Particle1D particle = new Particle1D(
+                new double[]{2.0}, new double[]{1.0}, 0.0,
+                particleType, dividedInfo);
+        EventInfo divider = particle.predBoundaryCol(null, false);
+
+        assertClose("1D divider time", divider.colTime, 2.0 - SimulationInfo.ARENA_DIVIDER_RADIUS);
+        if (divider.colType != Collision.BARRIER || divider.side != Wall.LEFT) {
+            throw new AssertionError("expected a left-side divider collision");
+        }
+        particle.boundaryCollide(divider, null, new Thermostat(false));
+        assertClose("1D divider position", particle.getX(), 4.0 - SimulationInfo.ARENA_DIVIDER_RADIUS);
+        assertClose("1D divider velocity", particle.getXVel(), -1.0);
+
+        Particle1D rightSide = new Particle1D(
+                new double[]{8.0}, new double[]{-1.0}, 0.0,
+                particleType, dividedInfo);
+        EventInfo rightDivider = rightSide.predBoundaryCol(null, false);
+        assertClose("1D right divider time", rightDivider.colTime,
+                2.0 - SimulationInfo.ARENA_DIVIDER_RADIUS);
+        if (rightDivider.colType != Collision.BARRIER || rightDivider.side != Wall.RIGHT) {
+            throw new AssertionError("expected a right-side divider collision");
+        }
+        rightSide.boundaryCollide(rightDivider, null, new Thermostat(false));
+        assertClose("1D right divider position", rightSide.getX(),
+                6.0 + SimulationInfo.ARENA_DIVIDER_RADIUS);
+        assertClose("1D right divider velocity", rightSide.getXVel(), 1.0);
+        System.out.println("1D divider handling PASS: left and right impacts");
+    }
+
+    private static void testTwoDimensionalDividerHandling() {
+        ParticleType particleType = new ParticleType(1.0, 1.0, Color.RED, "test");
+        SimulationInfo dividedInfo = createSimulationInfo(
+                particleType, 2, 10.0, 10.0, 10.0,
+                SimulationInfo.ArenaType.DIVIDED_ARENA);
+        Particle2D particle = new Particle2D(
+                new double[]{2.0, 4.0}, new double[]{1.0, 0.5}, 0.0,
+                particleType, dividedInfo);
+        EventInfo divider = particle.predBoundaryCol(null, false);
+
+        assertClose("2D divider time", divider.colTime, 2.0 - SimulationInfo.ARENA_DIVIDER_RADIUS);
+        if (divider.colType != Collision.BARRIER || divider.side != Wall.LEFT) {
+            throw new AssertionError("expected a 2D left-side divider collision");
+        }
+        particle.boundaryCollide(divider, null, new Thermostat(false));
+        assertClose("2D divider x position", particle.getX(), 4.0 - SimulationInfo.ARENA_DIVIDER_RADIUS);
+        assertClose("2D divider y position", particle.getY(), 5.0 - 0.5 * SimulationInfo.ARENA_DIVIDER_RADIUS);
+        assertClose("2D divider x velocity", particle.getXVel(), -1.0);
+        assertClose("2D divider y velocity", particle.getYVel(), 0.5);
+        System.out.println("2D divider handling PASS: x reflects and tangent motion continues");
+    }
+
+    private static void testThreeDimensionalDividerHandling() {
+        ParticleType particleType = new ParticleType(1.0, 1.0, Color.RED, "test");
+        SimulationInfo dividedInfo = createSimulationInfo(
+                particleType, 3, 10.0, 10.0, 10.0,
+                SimulationInfo.ArenaType.DIVIDED_ARENA);
+        Particle3D particle = new Particle3D(
+                new double[]{2.0, 4.0, 3.0}, new double[]{1.0, 0.5, -0.25}, 0.0,
+                particleType, dividedInfo);
+        EventInfo divider = particle.predBoundaryCol(null, false);
+
+        assertClose("3D divider time", divider.colTime, 2.0 - SimulationInfo.ARENA_DIVIDER_RADIUS);
+        if (divider.colType != Collision.BARRIER || divider.side != Wall.LEFT) {
+            throw new AssertionError("expected a 3D left-side divider collision");
+        }
+        particle.boundaryCollide(divider, null, new Thermostat(false));
+        assertClose("3D divider x position", particle.getX(), 4.0 - SimulationInfo.ARENA_DIVIDER_RADIUS);
+        assertClose("3D divider y position", particle.getY(), 5.0 - 0.5 * SimulationInfo.ARENA_DIVIDER_RADIUS);
+        assertClose("3D divider z position", particle.getZ(), 2.5 + 0.25 * SimulationInfo.ARENA_DIVIDER_RADIUS);
+        assertClose("3D divider x velocity", particle.getXVel(), -1.0);
+        assertClose("3D divider y velocity", particle.getYVel(), 0.5);
+        assertClose("3D divider z velocity", particle.getZVel(), -0.25);
+        System.out.println("3D divider handling PASS: x reflects and tangent motion continues");
+    }
+
+    private static void testTwoDimensionalDividerHole() {
+        ParticleType particleType = new ParticleType(1.0, 1.0, Color.RED, "test");
+        SimulationInfo holeInfo = createSimulationInfo(
+                particleType, 2, 10.0, 10.0, 10.0,
+                SimulationInfo.ArenaType.DIVIDED_ARENA_WITH_HOLE, 4.0);
+
+        Particle2D throughHole = new Particle2D(
+                new double[]{2.0, 5.0}, new double[]{1.0, 0.0}, 0.0,
+                particleType, holeInfo);
+        EventInfo passage = throughHole.predBoundaryCol(null, false);
+        assertClose("2D hole next boundary time", passage.colTime, 7.0);
+        if (passage.colType != Collision.WALL || passage.side != Wall.RIGHT) {
+            throw new AssertionError("centered particle should pass through the divider hole");
+        }
+        throughHole.moveToTime(4.0);
+        assertClose("2D hole passage x", throughHole.getX(), 6.0);
+        assertClose("2D hole passage x velocity", throughHole.getXVel(), 1.0);
+
+        Particle2D solidPart = new Particle2D(
+                new double[]{2.0, 8.0}, new double[]{1.0, 0.0}, 0.0,
+                particleType, holeInfo);
+        EventInfo barrier = solidPart.predBoundaryCol(null, false);
+        assertClose("2D hole solid-part time", barrier.colTime,
+                2.0 - SimulationInfo.ARENA_DIVIDER_RADIUS);
+        if (barrier.colType != Collision.BARRIER || barrier.side != Wall.LEFT) {
+            throw new AssertionError("particle outside the opening should hit the divider");
+        }
+        solidPart.boundaryCollide(barrier, null, new Thermostat(false));
+        assertClose("2D hole solid-part velocity", solidPart.getXVel(), -1.0);
+
+        Particle2D holeEdge = new Particle2D(
+                new double[]{2.0, 6.9}, new double[]{1.0, 0.0}, 0.0,
+                particleType, holeInfo);
+        EventInfo edge = holeEdge.predBoundaryCol(null, false);
+        if (edge.colType != Collision.EDGE) {
+            throw new AssertionError("particle near the opening edge should hit its edge particle");
+        }
+        double initialXVelocity = holeEdge.getXVel();
+        holeEdge.boundaryCollide(edge, null, new Thermostat(false));
+        if (Math.abs(holeEdge.getXVel() - initialXVelocity) < TOLERANCE) {
+            throw new AssertionError("hole-edge collision should change the velocity direction");
+        }
+
+        SimulationInfo demonInfo = createSimulationInfo(
+                particleType, 2, 10.0, 10.0, 10.0,
+                SimulationInfo.ArenaType.DIVIDED_ARENA_WITH_HOLE, 4.0, true);
+        Particle2D demonParticle = new Particle2D(
+                new double[]{2.0, 5.0}, new double[]{1.0, 0.0}, 0.0,
+                particleType, demonInfo);
+        EventInfo openDemonHole = demonParticle.predBoundaryCol(null, true);
+        assertClose("open demon-hole event time", openDemonHole.colTime, 7.0);
+        if (openDemonHole.colType != Collision.WALL) {
+            throw new AssertionError("open Maxwell-demon hole should allow passage");
+        }
+        EventInfo closedDemonHole = demonParticle.predBoundaryCol(null, false);
+        assertClose("closed demon-hole event time", closedDemonHole.colTime,
+                2.0 - SimulationInfo.ARENA_DIVIDER_RADIUS);
+        if (closedDemonHole.colType != Collision.BARRIER) {
+            throw new AssertionError("closed Maxwell-demon hole should act as a divider");
+        }
+        System.out.println(
+                "2D divider hole PASS: passage, solid divider, edge reflection, open/closed state");
+    }
+
     private static SimulationInfo createReflectingSimulationInfo(
             final ParticleType particleType,
             final int dimension,
             final double arenaXSize,
             final double arenaYSize,
             final double arenaZSize) {
+        return createSimulationInfo(
+                particleType, dimension, arenaXSize, arenaYSize, arenaZSize,
+                SimulationInfo.ArenaType.REFLECTING_BOUNDARIES);
+    }
+
+    private static SimulationInfo createSimulationInfo(
+            final ParticleType particleType,
+            final int dimension,
+            final double arenaXSize,
+            final double arenaYSize,
+            final double arenaZSize,
+            final SimulationInfo.ArenaType arenaType) {
+        return createSimulationInfo(
+                particleType, dimension, arenaXSize, arenaYSize, arenaZSize,
+                arenaType, 0.0);
+    }
+
+    private static SimulationInfo createSimulationInfo(
+            final ParticleType particleType,
+            final int dimension,
+            final double arenaXSize,
+            final double arenaYSize,
+            final double arenaZSize,
+            final SimulationInfo.ArenaType arenaType,
+            final double holeDiameter) {
+        return createSimulationInfo(
+                particleType, dimension, arenaXSize, arenaYSize, arenaZSize,
+                arenaType, holeDiameter, false);
+    }
+
+    private static SimulationInfo createSimulationInfo(
+            final ParticleType particleType,
+            final int dimension,
+            final double arenaXSize,
+            final double arenaYSize,
+            final double arenaZSize,
+            final SimulationInfo.ArenaType arenaType,
+            final double holeDiameter,
+            final boolean maxwellDemonMode) {
         SimulationInfoSupplier supplier = (SimulationInfoSupplier) Proxy.newProxyInstance(
                 SimulationInfoSupplier.class.getClassLoader(),
                 new Class<?>[]{SimulationInfoSupplier.class},
                 (proxy, method, args) -> {
                     String name = method.getName();
                     if ("getArenaType".equals(name)) {
-                        return SimulationInfo.ArenaType.REFLECTING_BOUNDARIES;
+                        return arenaType;
                     }
                     if ("getDimension".equals(name)) {
                         return dimension;
@@ -354,6 +596,12 @@ public final class ParticleMovementHarness {
                     }
                     if ("getArenaZSize".equals(name)) {
                         return arenaZSize;
+                    }
+                    if ("getHoleDiameter".equals(name)) {
+                        return holeDiameter;
+                    }
+                    if ("isMaxwellDemonModeSelected".equals(name)) {
+                        return maxwellDemonMode;
                     }
                     if ("getNumberOfParticleTypes".equals(name)) {
                         return 1;
