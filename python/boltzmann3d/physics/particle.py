@@ -23,6 +23,7 @@ class Particle:
     time_since_collision: float = 0.0
     mass: float = 1.0
     radius: float = 1.0
+    energy_well_depth: float = 0.0
 
     def __post_init__(self) -> None:
         self.position = tuple(float(component) for component in self.position)
@@ -31,6 +32,7 @@ class Particle:
         self.time_since_collision = float(self.time_since_collision)
         self.mass = float(self.mass)
         self.radius = float(self.radius)
+        self.energy_well_depth = float(self.energy_well_depth)
 
         if not self.position:
             raise ValueError("A particle must have at least one position component")
@@ -40,6 +42,8 @@ class Particle:
             raise ValueError("Particle mass must be positive")
         if self.radius < 0.0:
             raise ValueError("Particle radius cannot be negative")
+        if not math.isfinite(self.energy_well_depth) or self.energy_well_depth < 0.0:
+            raise ValueError("Particle energy-well depth must be finite and nonnegative")
 
     def move_to_time(self, target_time: float) -> None:
         """Advance the particle along its current velocity to ``target_time``."""
@@ -118,6 +122,58 @@ class Particle:
         if len(self.position) != 1 or len(other.position) != 1:
             raise ValueError("collide_1d requires two one-dimensional particles")
         self.collide(other, collision_time)
+
+    def collide_with_energy_well(
+        self, other: "Particle", collision_time: float, *, entering: bool
+    ) -> bool:
+        """Apply Java's 1D square-well velocity change to a particle pair.
+
+        The well depth is the sum of both particles' ``energy_well_depth``
+        values. If the pair lacks enough relative kinetic energy to exit the
+        well, they undergo an ordinary 1D elastic collision and remain inside.
+        """
+        if len(self.position) != 1 or len(other.position) != 1:
+            raise ValueError("Energy-well collisions currently support only 1D particles")
+
+        self.move_to_time(collision_time)
+        other.move_to_time(collision_time)
+
+        well_depth = self.energy_well_depth + other.energy_well_depth
+        if well_depth == 0.0:
+            return not entering
+
+        mass = self.mass
+        other_mass = other.mass
+        combined_mass = mass + other_mass
+        reduced_mass = mass * other_mass / combined_mass
+        momentum = mass * self.velocity[0] + other_mass * other.velocity[0]
+        velocity_difference = other.velocity[0] - self.velocity[0]
+
+        if entering:
+            squared_relative_speed = (
+                velocity_difference * velocity_difference + well_depth / reduced_mass
+            )
+        else:
+            squared_relative_speed = (
+                velocity_difference * velocity_difference - well_depth / reduced_mass
+            )
+            if squared_relative_speed < 0.0:
+                self.collide_1d(other, collision_time)
+                return False
+
+        relative_speed = math.sqrt(squared_relative_speed)
+        first_root = relative_speed
+        second_root = relative_speed
+        if self.velocity[0] < other.velocity[0]:
+            first_root = -first_root
+        else:
+            second_root = -second_root
+
+        self.velocity = ((momentum + other_mass * first_root) / combined_mass,)
+        other.velocity = ((momentum + mass * second_root) / combined_mass,)
+        self.time_since_collision = 0.0
+        other.time_since_collision = 0.0
+        return not entering
 
     def predict_collision_time(
         self,

@@ -40,6 +40,7 @@ public final class ParticleMovementHarness {
         testFractionalValues(simulationInfo, testType);
         testOneDimensionalElasticCollision(simulationInfo);
         testOneDimensionalCollisionPrediction(simulationInfo);
+        testOneDimensionalEnergyWell(testType);
         testTwoDimensionalParticleCollision();
         testThreeDimensionalParticleCollision();
         testPeriodicParticleCollisionAcrossBoundary();
@@ -193,6 +194,67 @@ public final class ParticleMovementHarness {
 
         System.out.println(
                 "1D collision prediction PASS: approaching=1.5 receding=no collision asynchronous=1.5");
+    }
+
+    private static void testOneDimensionalEnergyWell(ParticleType particleType) {
+        SimulationInfo entryInfo = createSimulationInfo(
+                particleType, 1, 30.0, 0.0, 0.0,
+                SimulationInfo.ArenaType.REFLECTING_BOUNDARIES,
+                0.0, false, true, 2.0, 1.0);
+        Particle1D enteringFirst = new Particle1D(
+                new double[]{2.0}, new double[]{1.0}, 0.0, particleType, entryInfo);
+        Particle1D enteringSecond = new Particle1D(
+                new double[]{8.0}, new double[]{-1.0}, 0.0, particleType, entryInfo);
+        EventInfo entry = new EventInfo(Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+        enteringFirst.predCol(enteringSecond, null, entry);
+        if (entry.colType != Collision.ENTER_WELL) {
+            throw new AssertionError("expected ENTER_WELL but got collision type " + entry.colType);
+        }
+        assertClose("well entry time", entry.colTime, 1.0);
+        enteringFirst.collideWith(enteringSecond, entry);
+        assertClose("well entry first velocity", enteringFirst.getXVel(), Math.sqrt(2.0));
+        assertClose("well entry second velocity", enteringSecond.getXVel(), -Math.sqrt(2.0));
+
+        SimulationInfo exitInfo = createSimulationInfo(
+                particleType, 1, 30.0, 0.0, 0.0,
+                SimulationInfo.ArenaType.REFLECTING_BOUNDARIES,
+                0.0, false, true, 2.0, 0.5);
+        Particle1D exitingFirst = new Particle1D(
+                new double[]{2.0}, new double[]{-1.0}, 0.0, particleType, exitInfo);
+        Particle1D exitingSecond = new Particle1D(
+                new double[]{5.5}, new double[]{1.0}, 0.0, particleType, exitInfo);
+        EventInfo lastEntry = new EventInfo(Collision.ENTER_WELL, Calendar.MINTIME, 0, 1, 0);
+        EventInfo exit = new EventInfo(Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+        exitingFirst.predCol(exitingSecond, lastEntry, exit);
+        if (exit.colType != Collision.EXIT_WELL) {
+            throw new AssertionError("expected EXIT_WELL but got collision type " + exit.colType);
+        }
+        assertClose("well exit time", exit.colTime, 0.25);
+        exitingFirst.collideWith(exitingSecond, exit);
+        assertClose("well exit first velocity", exitingFirst.getXVel(), -Math.sqrt(2.0) / 2.0);
+        assertClose("well exit second velocity", exitingSecond.getXVel(), Math.sqrt(2.0) / 2.0);
+
+        SimulationInfo trappedInfo = createSimulationInfo(
+                particleType, 1, 30.0, 0.0, 0.0,
+                SimulationInfo.ArenaType.REFLECTING_BOUNDARIES,
+                0.0, false, true, 2.0, 4.0);
+        Particle1D trappedFirst = new Particle1D(
+                new double[]{2.0}, new double[]{-1.0}, 0.0, particleType, trappedInfo);
+        Particle1D trappedSecond = new Particle1D(
+                new double[]{5.5}, new double[]{1.0}, 0.0, particleType, trappedInfo);
+        EventInfo trappedLastEntry = new EventInfo(
+                Collision.ENTER_WELL, Calendar.MINTIME, 0, 1, 0);
+        EventInfo trappedExit = new EventInfo(Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+        trappedFirst.predCol(trappedSecond, trappedLastEntry, trappedExit);
+        assertClose("trapped well exit time", trappedExit.colTime, 0.25);
+        trappedFirst.collideWith(trappedSecond, trappedExit);
+        if (trappedExit.colType != Collision.ENTER_WELL) {
+            throw new AssertionError("insufficient exit energy should leave the pair in the well");
+        }
+        assertClose("trapped first velocity", trappedFirst.getXVel(), 1.0);
+        assertClose("trapped second velocity", trappedSecond.getXVel(), -1.0);
+        System.out.println(
+                "1D energy well PASS: entry, exit, and insufficient-energy reflection match Java equations");
     }
 
     private static void testTwoDimensionalParticleCollision() {
@@ -577,6 +639,23 @@ public final class ParticleMovementHarness {
             final SimulationInfo.ArenaType arenaType,
             final double holeDiameter,
             final boolean maxwellDemonMode) {
+        return createSimulationInfo(
+                particleType, dimension, arenaXSize, arenaYSize, arenaZSize,
+                arenaType, holeDiameter, maxwellDemonMode, false, 0.0, 0.0);
+    }
+
+    private static SimulationInfo createSimulationInfo(
+            final ParticleType particleType,
+            final int dimension,
+            final double arenaXSize,
+            final double arenaYSize,
+            final double arenaZSize,
+            final SimulationInfo.ArenaType arenaType,
+            final double holeDiameter,
+            final boolean maxwellDemonMode,
+            final boolean attractiveInteractions,
+            final double interactionRadiusMultiplier,
+            final double energyWellDepth) {
         SimulationInfoSupplier supplier = (SimulationInfoSupplier) Proxy.newProxyInstance(
                 SimulationInfoSupplier.class.getClassLoader(),
                 new Class<?>[]{SimulationInfoSupplier.class},
@@ -602,6 +681,15 @@ public final class ParticleMovementHarness {
                     }
                     if ("isMaxwellDemonModeSelected".equals(name)) {
                         return maxwellDemonMode;
+                    }
+                    if ("areAttractiveInteractionsAllowed".equals(name)) {
+                        return attractiveInteractions;
+                    }
+                    if ("getRadiusOfInteractionMultiplier".equals(name)) {
+                        return interactionRadiusMultiplier;
+                    }
+                    if ("getEnergyWellDepth".equals(name)) {
+                        return energyWellDepth;
                     }
                     if ("getNumberOfParticleTypes".equals(name)) {
                         return 1;

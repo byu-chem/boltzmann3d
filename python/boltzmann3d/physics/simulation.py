@@ -9,7 +9,9 @@ from .particle import NO_COLLISION_TIME, Particle
 
 
 BoundaryMode = Literal["reflecting", "periodic", "divided"]
-EventKind = Literal["particle", "wall", "wrap", "divider", "edge"]
+EventKind = Literal[
+    "particle", "wall", "wrap", "divider", "edge", "well_entry", "well_exit"
+]
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,8 @@ class Simulation:
     ``boundary_mode`` may be ``"reflecting"``, ``"periodic"``, or
     ``"divided"``. A divided arena may include a ``hole_diameter`` in 2D/3D.
     Divider dimensions use the same units as particle coordinates and radii.
+    In 1D, ``interaction_radius_multiplier`` enables pairwise square wells;
+    each pair's well radius is this multiplier times the sum of its radii.
 
     It recomputes all candidate events after each collision, which is simple
     and suitable for validating the physics before replacing it with an
@@ -46,6 +50,7 @@ class Simulation:
         divider_half_width: float = 0.0,
         hole_diameter: float | None = None,
         hole_open: bool = True,
+        interaction_radius_multiplier: float | None = None,
     ):
         self.particles = list(particles)
         if boundary_mode not in ("reflecting", "periodic", "divided"):
@@ -58,6 +63,20 @@ class Simulation:
         if not isinstance(hole_open, bool):
             raise ValueError("hole_open must be a boolean")
         self.hole_open = hole_open
+        self.interaction_radius_multiplier = (
+            None
+            if interaction_radius_multiplier is None
+            else float(interaction_radius_multiplier)
+        )
+        if self.interaction_radius_multiplier is not None:
+            if (
+                not math.isfinite(self.interaction_radius_multiplier)
+                or self.interaction_radius_multiplier <= 1.0
+            ):
+                raise ValueError("Interaction-radius multiplier must be finite and greater than 1")
+            if boundary_mode == "periodic":
+                raise ValueError("Attractive interactions are not supported with periodic boundaries")
+        self._inside_interaction_wells: set[tuple[int, int]] = set()
         if self.hole_diameter is not None:
             if boundary_mode != "divided":
                 raise ValueError("A divider hole requires boundary_mode='divided'")
@@ -72,6 +91,8 @@ class Simulation:
             ):
                 raise ValueError("Arena must have one, two, or three positive dimensions")
             self._validate_hole_size(len(self.arena_sizes))
+            if self.interaction_radius_multiplier is not None and len(self.arena_sizes) != 1:
+                raise NotImplementedError("Attractive interactions currently support only 1D")
             self.current_time = 0.0
             return
 
@@ -87,6 +108,8 @@ class Simulation:
         if any(size <= 0.0 for size in self.arena_sizes):
             raise ValueError("Arena dimensions must be positive")
         self._validate_hole_size(dimension)
+        if self.interaction_radius_multiplier is not None and dimension != 1:
+            raise NotImplementedError("Attractive interactions currently support only 1D")
         self.current_time = max(particle.time for particle in self.particles)
         for particle in self.particles:
             if particle.time < self.current_time:
@@ -112,6 +135,69 @@ class Simulation:
                     particle._validate_divider(self.arena_sizes, self.divider_half_width)
                 else:
                     self._validate_hole_particle(particle)
+        self._initialize_interaction_well_states()
+
+    def _initialize_interaction_well_states(self) -> None:
+        if self.interaction_radius_multiplier is None:
+            return
+        for first_index, first in enumerate(self.particles):
+            for second_index in range(first_index + 1, len(self.particles)):
+                second = self.particles[second_index]
+                if first.energy_well_depth + second.energy_well_depth == 0.0:
+                    continue
+                well_radius = self.interaction_radius_multiplier * (
+                    first.radius + second.radius
+                )
+                if abs(first.position[0] - second.position[0]) < well_radius:
+                    self._inside_interaction_wells.add((first_index, second_index))
+
+    def _predict_interaction_well_event(
+        self,
+        first_index: int,
+        second_index: int,
+        first: Particle,
+        second: Particle,
+    ) -> SimulationEvent | None:
+        if self.interaction_radius_multiplier is None:
+            return None
+        if first.energy_well_depth + second.energy_well_depth == 0.0:
+            return None
+
+        current_time = max(first.time, second.time)
+        if first.time > second.time:
+            distance = first.position[0] - (
+                second.position[0] + second.velocity[0] * (current_time - second.time)
+            )
+        else:
+            distance = (
+                first.position[0] + first.velocity[0] * (current_time - first.time)
+            ) - second.position[0]
+        relative_speed = first.velocity[0] - second.velocity[0]
+        a = relative_speed * relative_speed
+        if a == 0.0:
+            return None
+
+        well_radius = self.interaction_radius_multiplier * (
+            first.radius + second.radius
+        )
+        b = distance * relative_speed
+        c = distance * distance - well_radius * well_radius
+        discriminant = b * b - a * c
+        if discriminant < 0.0:
+            return None
+        root = math.sqrt(discriminant)
+        pair = (first_index, second_index)
+        if pair in self._inside_interaction_wells:
+            elapsed_time = (-b + root) / a
+            kind: EventKind = "well_exit"
+        else:
+            if b >= 0.0:
+                return None
+            elapsed_time = (-b - root) / a
+            kind = "well_entry"
+        if elapsed_time < 0.0:
+            return None
+        return SimulationEvent(current_time + elapsed_time, kind, pair)
 
     def set_hole_open(self, is_open: bool) -> None:
         """Change the hole state before predicting the next simulation events."""
@@ -419,18 +505,29 @@ class Simulation:
                                 image_offset=tuple(image_offset),
                             )
                         )
+                well_event = self._predict_interaction_well_event(
+                    first_index, second_index, first, second
+                )
+                if well_event is not None:
+                    candidates.append(well_event)
 
         if not candidates:
             return None
-        # Deterministic tie order: particle collisions, wall/divider events,
-        # then periodic wraps; indices and axis break remaining ties.
+        # Deterministic tie order: particle collisions, wall/divider/well events,
+        # then edge and periodic-wrap events; indices break remaining ties.
         return min(
             candidates,
             key=lambda event: (
                 event.time,
-                {"particle": 0, "wall": 1, "divider": 1, "edge": 2, "wrap": 3}[
-                    event.kind
-                ],
+                {
+                    "particle": 0,
+                    "wall": 1,
+                    "divider": 1,
+                    "well_entry": 1,
+                    "well_exit": 1,
+                    "edge": 2,
+                    "wrap": 3,
+                }[event.kind],
                 event.particle_indices,
                 -1 if event.axis is None else event.axis,
                 () if event.image_offset is None else event.image_offset,
@@ -443,6 +540,18 @@ class Simulation:
             self.particles[first_index].collide(
                 self.particles[second_index], event.time, event.image_offset
             )
+        elif event.kind in ("well_entry", "well_exit"):
+            first_index, second_index = event.particle_indices
+            first = self.particles[first_index]
+            second = self.particles[second_index]
+            exited = first.collide_with_energy_well(
+                second, event.time, entering=event.kind == "well_entry"
+            )
+            pair = (first_index, second_index)
+            if event.kind == "well_entry":
+                self._inside_interaction_wells.add(pair)
+            elif exited:
+                self._inside_interaction_wells.discard(pair)
         elif event.kind == "wall":
             (particle_index,) = event.particle_indices
             if event.axis is None:

@@ -413,6 +413,99 @@ class SimulationEventLoopTests(unittest.TestCase):
                 hole_open=1,
             )
 
+    def test_energy_well_entry_changes_1d_velocities_at_well_radius(self) -> None:
+        first = Particle(
+            position=(2.0,), velocity=(1.0,), mass=1.0, radius=1.0,
+            energy_well_depth=1.0,
+        )
+        second = Particle(
+            position=(8.0,), velocity=(-1.0,), mass=1.0, radius=1.0,
+            energy_well_depth=1.0,
+        )
+        simulation = Simulation(
+            [first, second], (30.0,), interaction_radius_multiplier=2.0
+        )
+
+        events = simulation.advance_to(1.0)
+
+        self.assertEqual([(event.kind, event.time) for event in events], [
+            ("well_entry", 1.0)
+        ])
+        self.assertAlmostEqual(first.position[0], 3.0)
+        self.assertAlmostEqual(second.position[0], 7.0)
+        self.assertAlmostEqual(first.velocity[0], math.sqrt(2.0))
+        self.assertAlmostEqual(second.velocity[0], -math.sqrt(2.0))
+        self.assertAlmostEqual(first.mass * first.velocity[0] + second.mass * second.velocity[0], 0.0)
+
+    def test_energy_well_exit_slows_particles_when_they_have_enough_energy(self) -> None:
+        first = Particle(
+            position=(2.0,), velocity=(-1.0,), mass=1.0, radius=1.0,
+            energy_well_depth=0.5,
+        )
+        second = Particle(
+            position=(5.5,), velocity=(1.0,), mass=1.0, radius=1.0,
+            energy_well_depth=0.5,
+        )
+        simulation = Simulation(
+            [first, second], (30.0,), interaction_radius_multiplier=2.0
+        )
+
+        events = simulation.advance_to(0.25)
+
+        self.assertEqual([(event.kind, event.time) for event in events], [
+            ("well_exit", 0.25)
+        ])
+        self.assertAlmostEqual(first.velocity[0], -math.sqrt(2.0) / 2.0)
+        self.assertAlmostEqual(second.velocity[0], math.sqrt(2.0) / 2.0)
+        self.assertNotIn((0, 1), simulation._inside_interaction_wells)
+
+    def test_energy_well_exit_reflects_particles_without_enough_energy(self) -> None:
+        first = Particle(
+            position=(2.0,), velocity=(-1.0,), mass=1.0, radius=1.0,
+            energy_well_depth=4.0,
+        )
+        second = Particle(
+            position=(5.5,), velocity=(1.0,), mass=1.0, radius=1.0,
+            energy_well_depth=4.0,
+        )
+        simulation = Simulation(
+            [first, second], (30.0,), interaction_radius_multiplier=2.0
+        )
+
+        events = simulation.advance_to(0.25)
+
+        self.assertEqual([(event.kind, event.time) for event in events], [
+            ("well_exit", 0.25)
+        ])
+        self.assertEqual(first.velocity, (1.0,))
+        self.assertEqual(second.velocity, (-1.0,))
+        self.assertIn((0, 1), simulation._inside_interaction_wells)
+        next_event = simulation.next_event()
+        self.assertIsNotNone(next_event)
+        self.assertEqual(next_event.kind, "particle")
+        self.assertAlmostEqual(next_event.time, 1.25)
+
+    def test_energy_well_settings_are_limited_to_nonperiodic_1d(self) -> None:
+        with self.assertRaises(ValueError):
+            Particle(position=(0.0,), velocity=(0.0,), energy_well_depth=-1.0)
+
+        particle_2d = Particle(position=(5.0, 5.0), velocity=(0.0, 0.0))
+        with self.assertRaises(NotImplementedError):
+            Simulation(
+                [particle_2d],
+                (10.0, 10.0),
+                interaction_radius_multiplier=2.0,
+            )
+
+        particle_1d = Particle(position=(5.0,), velocity=(0.0,))
+        with self.assertRaises(ValueError):
+            Simulation(
+                [particle_1d],
+                (10.0,),
+                boundary_mode="periodic",
+                interaction_radius_multiplier=2.0,
+            )
+
     def test_divider_hole_rejects_1d_and_invalid_sizes(self) -> None:
         particle_1d = Particle(position=(2.0,), velocity=(1.0,), radius=0.5)
         with self.assertRaises(ValueError):
