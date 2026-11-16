@@ -34,7 +34,7 @@ class Simulation:
     ``boundary_mode`` may be ``"reflecting"``, ``"periodic"``, or
     ``"divided"``. A divided arena may include a ``hole_diameter`` in 2D/3D.
     Divider dimensions use the same units as particle coordinates and radii.
-    In 1D and 2D, ``interaction_radius_multiplier`` enables pairwise square
+    In 1D, 2D, and 3D, ``interaction_radius_multiplier`` enables pairwise square
     wells; each pair's well radius is this multiplier times the sum of its radii.
 
     It recomputes all candidate events after each collision, which is simple
@@ -91,8 +91,6 @@ class Simulation:
             ):
                 raise ValueError("Arena must have one, two, or three positive dimensions")
             self._validate_hole_size(len(self.arena_sizes))
-            if self.interaction_radius_multiplier is not None and len(self.arena_sizes) not in (1, 2):
-                raise NotImplementedError("Attractive interactions currently support only 1D and 2D")
             self.current_time = 0.0
             return
 
@@ -108,8 +106,6 @@ class Simulation:
         if any(size <= 0.0 for size in self.arena_sizes):
             raise ValueError("Arena dimensions must be positive")
         self._validate_hole_size(dimension)
-        if self.interaction_radius_multiplier is not None and dimension not in (1, 2):
-            raise NotImplementedError("Attractive interactions currently support only 1D and 2D")
         self.current_time = max(particle.time for particle in self.particles)
         for particle in self.particles:
             if particle.time < self.current_time:

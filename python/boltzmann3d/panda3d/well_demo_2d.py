@@ -30,7 +30,7 @@ class EnergyWell2DScene:
         self.root = app.render.attachNewNode("energy-well-2d-demo")
         self.paused = False
         self.mode = "pass"
-        self.last_event = "Approaching the circular interaction well"
+        self.last_event = "Approaching the interaction well"
 
         self._add_lighting()
         self._add_arena()
@@ -107,7 +107,7 @@ class EnergyWell2DScene:
             # changes the velocities along a 2D line of centers.
             positions = ((10.0, 12.0), (50.0, 22.0))
             velocities = ((20.0, 4.0), (-20.0, -4.0))
-            self.last_event = "Approaching the circular interaction well"
+            self.last_event = "Approaching the interaction well"
             self.mode_label = "PASS AND EXIT"
         else:
             # Start within the well and move outward with insufficient energy
@@ -139,6 +139,15 @@ class EnergyWell2DScene:
         for particle, node in zip(self.simulation.particles, self.particle_nodes):
             # Simulation (x, y) maps to Panda3D's horizontal (x, z) plane.
             node.setPos(particle.position[0], 0.0, particle.position[1])
+
+    def destroy(self) -> None:
+        """Remove this scene before the Panda3D app switches dimensions."""
+        self.app.taskMgr.remove("energy-well-2d-update")
+        for key in ("1", "2", "r", "space"):
+            self.app.ignore(key)
+        self.instructions.destroy()
+        self.status.destroy()
+        self.root.removeNode()
 
     def _toggle_pause(self) -> None:
         self.paused = not self.paused

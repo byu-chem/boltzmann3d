@@ -156,6 +156,15 @@ class EnergyWellScene:
         for particle, node in zip(self.simulation.particles, self.particle_nodes):
             node.setPos(particle.position[0], 0.0, self.ARENA_HEIGHT / 2.0)
 
+    def destroy(self) -> None:
+        """Remove this scene before the Panda3D app switches dimensions."""
+        self.app.taskMgr.remove("energy-well-demo-update")
+        for key in ("1", "2", "r", "space"):
+            self.app.ignore(key)
+        self.instructions.destroy()
+        self.status.destroy()
+        self.root.removeNode()
+
     def _toggle_pause(self) -> None:
         self.paused = not self.paused
 

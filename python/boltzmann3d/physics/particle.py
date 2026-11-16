@@ -129,17 +129,17 @@ class Particle:
     def collide_with_energy_well(
         self, other: "Particle", collision_time: float, *, entering: bool
     ) -> bool:
-        """Apply Java's 1D or 2D square-well velocity change to a pair.
+        """Apply Java's 1D, 2D, or 3D square-well velocity change to a pair.
 
         The well depth is the sum of both particles' ``energy_well_depth``
         values. If the pair lacks enough relative kinetic energy to exit the
         well, they undergo an ordinary elastic collision and remain inside.
-        In 2D, only the velocity component along the center-to-center axis
-        changes; tangential components are preserved.
+        In 2D and 3D, only the velocity component along the center-to-center
+        axis changes; perpendicular components are preserved.
         """
         dimension = len(self.position)
-        if dimension not in (1, 2) or len(other.position) != dimension:
-            raise ValueError("Energy-well collisions require matching 1D or 2D particles")
+        if dimension not in (1, 2, 3) or len(other.position) != dimension:
+            raise ValueError("Energy-well collisions require matching 1D, 2D, or 3D particles")
 
         self.move_to_time(collision_time)
         other.move_to_time(collision_time)
@@ -171,8 +171,8 @@ class Particle:
             other_normal_speed = sum(
                 speed * component for speed, component in zip(other.velocity, normal)
             )
-            # Particle2D converts the UI's kJ/mol well depth into the
-            # amu·m²/s² units used by its velocity and mass values.
+            # Particle2D and Particle3D convert the UI's kJ/mol well depth
+            # into the amu·m²/s² units used by velocity and mass values.
             well_depth *= _KILOJOULE_PER_MOLE_TO_AMU_M2_PER_S2
 
         mass = self.mass
