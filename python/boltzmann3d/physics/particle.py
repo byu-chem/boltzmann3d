@@ -6,6 +6,9 @@ import sys
 
 
 NO_COLLISION_TIME = sys.float_info.max
+_KILOJOULE_PER_MOLE_TO_AMU_M2_PER_S2 = (
+    1_000.0 / 6.02214179e23 / 1.660538782e-27
+)
 
 
 @dataclass
@@ -126,14 +129,17 @@ class Particle:
     def collide_with_energy_well(
         self, other: "Particle", collision_time: float, *, entering: bool
     ) -> bool:
-        """Apply Java's 1D square-well velocity change to a particle pair.
+        """Apply Java's 1D or 2D square-well velocity change to a pair.
 
         The well depth is the sum of both particles' ``energy_well_depth``
         values. If the pair lacks enough relative kinetic energy to exit the
-        well, they undergo an ordinary 1D elastic collision and remain inside.
+        well, they undergo an ordinary elastic collision and remain inside.
+        In 2D, only the velocity component along the center-to-center axis
+        changes; tangential components are preserved.
         """
-        if len(self.position) != 1 or len(other.position) != 1:
-            raise ValueError("Energy-well collisions currently support only 1D particles")
+        dimension = len(self.position)
+        if dimension not in (1, 2) or len(other.position) != dimension:
+            raise ValueError("Energy-well collisions require matching 1D or 2D particles")
 
         self.move_to_time(collision_time)
         other.move_to_time(collision_time)
@@ -142,12 +148,39 @@ class Particle:
         if well_depth == 0.0:
             return not entering
 
+        if dimension == 1:
+            normal = (1.0,)
+            first_normal_speed = self.velocity[0]
+            other_normal_speed = other.velocity[0]
+        else:
+            center_delta = tuple(
+                other_coordinate - self_coordinate
+                for self_coordinate, other_coordinate in zip(
+                    self.position, other.position
+                )
+            )
+            center_distance = math.sqrt(
+                sum(component * component for component in center_delta)
+            )
+            if center_distance == 0.0:
+                raise ValueError("Cannot resolve a well event at coincident particle centers")
+            normal = tuple(component / center_distance for component in center_delta)
+            first_normal_speed = sum(
+                speed * component for speed, component in zip(self.velocity, normal)
+            )
+            other_normal_speed = sum(
+                speed * component for speed, component in zip(other.velocity, normal)
+            )
+            # Particle2D converts the UI's kJ/mol well depth into the
+            # amu·m²/s² units used by its velocity and mass values.
+            well_depth *= _KILOJOULE_PER_MOLE_TO_AMU_M2_PER_S2
+
         mass = self.mass
         other_mass = other.mass
         combined_mass = mass + other_mass
         reduced_mass = mass * other_mass / combined_mass
-        momentum = mass * self.velocity[0] + other_mass * other.velocity[0]
-        velocity_difference = other.velocity[0] - self.velocity[0]
+        momentum = mass * first_normal_speed + other_mass * other_normal_speed
+        velocity_difference = other_normal_speed - first_normal_speed
 
         if entering:
             squared_relative_speed = (
@@ -158,19 +191,27 @@ class Particle:
                 velocity_difference * velocity_difference - well_depth / reduced_mass
             )
             if squared_relative_speed < 0.0:
-                self.collide_1d(other, collision_time)
+                self.collide(other, collision_time)
                 return False
 
         relative_speed = math.sqrt(squared_relative_speed)
         first_root = relative_speed
         second_root = relative_speed
-        if self.velocity[0] < other.velocity[0]:
+        if first_normal_speed < other_normal_speed:
             first_root = -first_root
         else:
             second_root = -second_root
 
-        self.velocity = ((momentum + other_mass * first_root) / combined_mass,)
-        other.velocity = ((momentum + mass * second_root) / combined_mass,)
+        new_first_normal_speed = (momentum + other_mass * first_root) / combined_mass
+        new_other_normal_speed = (momentum + mass * second_root) / combined_mass
+        self.velocity = tuple(
+            speed + (new_first_normal_speed - first_normal_speed) * component
+            for speed, component in zip(self.velocity, normal)
+        )
+        other.velocity = tuple(
+            speed + (new_other_normal_speed - other_normal_speed) * component
+            for speed, component in zip(other.velocity, normal)
+        )
         self.time_since_collision = 0.0
         other.time_since_collision = 0.0
         return not entering

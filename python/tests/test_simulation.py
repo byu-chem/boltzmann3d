@@ -485,15 +485,22 @@ class SimulationEventLoopTests(unittest.TestCase):
         self.assertEqual(next_event.kind, "particle")
         self.assertAlmostEqual(next_event.time, 1.25)
 
-    def test_energy_well_settings_are_limited_to_nonperiodic_1d(self) -> None:
+    def test_energy_well_settings_support_1d_and_2d_but_not_periodic_or_3d(self) -> None:
         with self.assertRaises(ValueError):
             Particle(position=(0.0,), velocity=(0.0,), energy_well_depth=-1.0)
 
         particle_2d = Particle(position=(5.0, 5.0), velocity=(0.0, 0.0))
+        Simulation(
+            [particle_2d],
+            (10.0, 10.0),
+            interaction_radius_multiplier=2.0,
+        )
+
+        particle_3d = Particle(position=(5.0, 5.0, 5.0), velocity=(0.0, 0.0, 0.0))
         with self.assertRaises(NotImplementedError):
             Simulation(
-                [particle_2d],
-                (10.0, 10.0),
+                [particle_3d],
+                (10.0, 10.0, 10.0),
                 interaction_radius_multiplier=2.0,
             )
 

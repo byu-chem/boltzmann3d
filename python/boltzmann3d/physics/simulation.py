@@ -34,8 +34,8 @@ class Simulation:
     ``boundary_mode`` may be ``"reflecting"``, ``"periodic"``, or
     ``"divided"``. A divided arena may include a ``hole_diameter`` in 2D/3D.
     Divider dimensions use the same units as particle coordinates and radii.
-    In 1D, ``interaction_radius_multiplier`` enables pairwise square wells;
-    each pair's well radius is this multiplier times the sum of its radii.
+    In 1D and 2D, ``interaction_radius_multiplier`` enables pairwise square
+    wells; each pair's well radius is this multiplier times the sum of its radii.
 
     It recomputes all candidate events after each collision, which is simple
     and suitable for validating the physics before replacing it with an
@@ -91,8 +91,8 @@ class Simulation:
             ):
                 raise ValueError("Arena must have one, two, or three positive dimensions")
             self._validate_hole_size(len(self.arena_sizes))
-            if self.interaction_radius_multiplier is not None and len(self.arena_sizes) != 1:
-                raise NotImplementedError("Attractive interactions currently support only 1D")
+            if self.interaction_radius_multiplier is not None and len(self.arena_sizes) not in (1, 2):
+                raise NotImplementedError("Attractive interactions currently support only 1D and 2D")
             self.current_time = 0.0
             return
 
@@ -108,8 +108,8 @@ class Simulation:
         if any(size <= 0.0 for size in self.arena_sizes):
             raise ValueError("Arena dimensions must be positive")
         self._validate_hole_size(dimension)
-        if self.interaction_radius_multiplier is not None and dimension != 1:
-            raise NotImplementedError("Attractive interactions currently support only 1D")
+        if self.interaction_radius_multiplier is not None and dimension not in (1, 2):
+            raise NotImplementedError("Attractive interactions currently support only 1D and 2D")
         self.current_time = max(particle.time for particle in self.particles)
         for particle in self.particles:
             if particle.time < self.current_time:
@@ -148,7 +148,13 @@ class Simulation:
                 well_radius = self.interaction_radius_multiplier * (
                     first.radius + second.radius
                 )
-                if abs(first.position[0] - second.position[0]) < well_radius:
+                separation_squared = sum(
+                    (first_coordinate - second_coordinate) ** 2
+                    for first_coordinate, second_coordinate in zip(
+                        first.position, second.position
+                    )
+                )
+                if separation_squared < well_radius * well_radius:
                     self._inside_interaction_wells.add((first_index, second_index))
 
     def _predict_interaction_well_event(
@@ -165,23 +171,43 @@ class Simulation:
 
         current_time = max(first.time, second.time)
         if first.time > second.time:
-            distance = first.position[0] - (
-                second.position[0] + second.velocity[0] * (current_time - second.time)
+            displacement = tuple(
+                first_coordinate
+                - (
+                    second_coordinate
+                    + second_speed * (current_time - second.time)
+                )
+                for first_coordinate, second_coordinate, second_speed in zip(
+                    first.position, second.position, second.velocity
+                )
             )
         else:
-            distance = (
-                first.position[0] + first.velocity[0] * (current_time - first.time)
-            ) - second.position[0]
-        relative_speed = first.velocity[0] - second.velocity[0]
-        a = relative_speed * relative_speed
+            displacement = tuple(
+                first_coordinate + first_speed * (current_time - first.time)
+                - second_coordinate
+                for first_coordinate, first_speed, second_coordinate in zip(
+                    first.position, first.velocity, second.position
+                )
+            )
+        relative_velocity = tuple(
+            first_speed - second_speed
+            for first_speed, second_speed in zip(first.velocity, second.velocity)
+        )
+        a = sum(speed * speed for speed in relative_velocity)
         if a == 0.0:
             return None
 
         well_radius = self.interaction_radius_multiplier * (
             first.radius + second.radius
         )
-        b = distance * relative_speed
-        c = distance * distance - well_radius * well_radius
+        b = sum(
+            coordinate * speed
+            for coordinate, speed in zip(displacement, relative_velocity)
+        )
+        c = (
+            sum(coordinate * coordinate for coordinate in displacement)
+            - well_radius * well_radius
+        )
         discriminant = b * b - a * c
         if discriminant < 0.0:
             return None
@@ -509,7 +535,15 @@ class Simulation:
                     first_index, second_index, first, second
                 )
                 if well_event is not None:
-                    candidates.append(well_event)
+                    well_crosses_solid_divider = (
+                        self.boundary_mode == "divided"
+                        and on_opposite_sides
+                        and self._collision_is_blocked_by_divider(
+                            first, second, well_event.time
+                        )
+                    )
+                    if not well_crosses_solid_divider:
+                        candidates.append(well_event)
 
         if not candidates:
             return None
