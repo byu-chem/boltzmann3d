@@ -127,6 +127,29 @@ def run_piston_event_edge_cases() -> None:
         if event is None or event.kind != "wall":
             raise AssertionError(f"{dimension}D wall should win piston/wall tie, got {event}")
         _assert_close(f"{dimension}D piston/wall tied event time", event.time, 14.0)
+        processed = catching_simulation.advance_to(14.0)
+        if len(processed) != 1 or processed[0].kind != "wall":
+            raise AssertionError(f"{dimension}D scheduler processed unexpected events: {processed}")
+        expected_position = list(position)
+        expected_position[piston_axis] = 19.0
+        if catching_particle.position != tuple(expected_position):
+            raise AssertionError(
+                f"{dimension}D wall event position mismatch: {catching_particle.position}"
+            )
+        expected_velocity = [0.0] * dimension
+        expected_velocity[piston_axis] = -1.0
+        if catching_particle.velocity != tuple(expected_velocity):
+            raise AssertionError(
+                f"{dimension}D wall event velocity mismatch: {catching_particle.velocity}"
+            )
+        rescheduled_event = catching_simulation.next_event()
+        if rescheduled_event is None or rescheduled_event.kind != "wall":
+            raise AssertionError(
+                f"{dimension}D expected a wall event after rescheduling, got {rescheduled_event}"
+            )
+        _assert_close(
+            f"{dimension}D post-tie rescheduled wall time", rescheduled_event.time, 32.0
+        )
 
         # A particle moving away from the expanding piston has no piston
         # collision; its next event is the wall behind it.
@@ -148,6 +171,33 @@ def run_piston_event_edge_cases() -> None:
         if event is None or event.kind != "wall":
             raise AssertionError(f"{dimension}D expected a wall event, got {event}")
         _assert_close(f"{dimension}D departing particle wall time", event.time, 4.0)
+        processed = departing_simulation.advance_to(4.0)
+        if len(processed) != 1 or processed[0].kind != "wall":
+            raise AssertionError(
+                f"{dimension}D moving-away case processed unexpected events: {processed}"
+            )
+        expected_position = list(position)
+        expected_position[piston_axis] = 1.0
+        if departing_particle.position != tuple(expected_position):
+            raise AssertionError(
+                f"{dimension}D departing wall position mismatch: {departing_particle.position}"
+            )
+        expected_velocity = [0.0] * dimension
+        expected_velocity[piston_axis] = 1.0
+        if departing_particle.velocity != tuple(expected_velocity):
+            raise AssertionError(
+                f"{dimension}D departing wall velocity mismatch: {departing_particle.velocity}"
+            )
+        rescheduled_event = departing_simulation.next_event()
+        if rescheduled_event is None or rescheduled_event.kind != "wall":
+            raise AssertionError(
+                f"{dimension}D expected a wall event after departing collision, got {rescheduled_event}"
+            )
+        _assert_close(
+            f"{dimension}D post-departure rescheduled wall time",
+            rescheduled_event.time,
+            22.0,
+        )
         print(
             f"{dimension}D piston edges PASS: stop/catch and wall tie at 14.0; "
             "moving-away case has no piston event"

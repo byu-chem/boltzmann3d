@@ -18,8 +18,12 @@ This checklist tracks feature parity between the Java application and the Python
 - [ ] Compare each implemented behavior against Java, including edge cases and collision ordering.
 - [x] Compare controlled 1D/2D/3D isothermal piston impacts and following thermostat-adjusted wall collisions against Java particle methods.
 - [x] Compare 1D/2D/3D piston prediction when the piston stops before a particle catches it, an exact piston/wall event tie, and a particle moving away from the piston against Java's particle boundary predictor.
-- [ ] Verify full piston event-calendar scheduling against Java. `Physics.java` still has a TODO for the `PISTON_ALL` update path, so the direct particle-predictor comparisons above do not establish full scheduler parity.
-- [ ] Port remaining Java physics/statistics corrections, including finite-system and real-gas corrections where the Java application uses them.
+- [x] Compare Java Calendar boundary-row selection and rescheduling after piston/wall events with Python event processing for controlled 1D/2D/3D cases.
+- [ ] Exercise the full Java `Physics.advanceToTime` loop after piston target changes and with multiple particles. Its `PISTON_ALL` path recalculates boundary predictions, but still contains a TODO, and the harness does not instantiate the full Physics controller.
+- [x] Port and compare Java's periodic finite-system correction for predicted average kinetic energy in 1D/2D/3D.
+- [x] Port and compare Java's finite-system correction for kinetic-energy width in 1D/2D/3D.
+- [ ] Port the remaining finite-system corrections for speed and velocity predictions.
+- [ ] Port Java real-gas corrections where the statistics use them.
 - [ ] Add support for multiple particle types and reaction relationships throughout the simulation model.
 - [ ] Replace or benchmark Python's all-pairs event search if it is too slow at the particle counts the application needs. Python currently recomputes candidate events instead of using Java's event calendar.
 

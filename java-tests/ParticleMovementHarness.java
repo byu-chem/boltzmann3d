@@ -8,6 +8,7 @@ import edu.byu.chem.boltzmann.model.physics.Thermostat;
 import edu.byu.chem.boltzmann.model.physics.Piston;
 import edu.byu.chem.boltzmann.model.physics.WallController;
 import edu.byu.chem.boltzmann.model.physics.Wall;
+import edu.byu.chem.boltzmann.model.statistics.Formulas;
 import edu.byu.chem.boltzmann.utils.Units;
 import edu.byu.chem.boltzmann.utils.Units.Energy;
 import edu.byu.chem.boltzmann.utils.data.ParticleType;
@@ -57,6 +58,7 @@ public final class ParticleMovementHarness {
         testOneDimensionalWallHandling();
         testOneDimensionalIsothermalPistonAndThermostat();
         testOneDimensionalPistonEventOrdering();
+        testFiniteSystemKineticEnergyCorrection();
         testTwoDimensionalIsothermalPistonAndThermostat();
         testThreeDimensionalIsothermalPistonAndThermostat();
         testTwoDimensionalWallHandling();
@@ -790,6 +792,15 @@ public final class ParticleMovementHarness {
                     + selected.colType + " side=" + selected.side);
         }
         assertClose("Java piston/wall tied event time", selected.colTime, 14.0);
+        Calendar calendar = new Calendar(1);
+        EventInfo scheduled = queueBoundaryEvent(calendar, selected, Collision.PISTON_ALL);
+        if (scheduled.colType != Collision.WALL || scheduled.side != Wall.RIGHT) {
+            throw new AssertionError("Java calendar should schedule the right wall at the tie");
+        }
+        assertClose("Java calendar piston/wall tie time", scheduled.colTime, 14.0);
+        catching.boundaryCollide(scheduled, piston, new Thermostat(false));
+        assertClose("Java 1D scheduled wall position", catching.getX(), 19.0);
+        assertClose("Java 1D scheduled wall velocity", catching.getXVel(), -1.0);
 
         // A particle moving left separates from the right-moving piston, so
         // its only predicted event is the left arena wall.
@@ -805,6 +816,17 @@ public final class ParticleMovementHarness {
             throw new AssertionError("expected the departing particle's left-wall event");
         }
         assertClose("Java departing particle wall time", leftWall.colTime, 4.0);
+        departing.boundaryCollide(leftWall, piston, new Thermostat(false));
+        assertClose("Java 1D departing wall position", departing.getX(), 1.0);
+        assertClose("Java 1D departing wall velocity", departing.getXVel(), 1.0);
+        piston.MoveToTime(14.0);
+        EventInfo afterTiePrediction = catching.predBoundaryCol(piston, false);
+        EventInfo afterTieScheduled = queueBoundaryEvent(
+                calendar, afterTiePrediction, Collision.PARTICLE_1);
+        if (afterTieScheduled.colType != Collision.WALL || afterTieScheduled.side != Wall.LEFT) {
+            throw new AssertionError("Java calendar should refresh the next left-wall event");
+        }
+        assertClose("Java rescheduled wall after piston tie", afterTieScheduled.colTime, 32.0);
 
         SimulationInfo simulationInfo2D = createSimulationInfo(
                 particleType, 2, 20.0, 20.0, 0.0,
@@ -822,6 +844,13 @@ public final class ParticleMovementHarness {
             throw new AssertionError("2D top wall should win exact piston tie");
         }
         assertClose("Java 2D piston/wall tie time", selected2D.colTime, 14.0);
+        Calendar calendar2D = new Calendar(1);
+        EventInfo scheduled2D = queueBoundaryEvent(
+                calendar2D, selected2D, Collision.PISTON_ALL);
+        assertClose("Java 2D calendar tie time", scheduled2D.colTime, 14.0);
+        catching2D.boundaryCollide(scheduled2D, piston2D, new Thermostat(false));
+        assertClose("Java 2D scheduled wall y", catching2D.getY(), 19.0);
+        assertClose("Java 2D scheduled wall vy", catching2D.getYVel(), -1.0);
         Particle2D departing2D = new Particle2D(
                 new double[]{5.0, 5.0}, new double[]{0.0, -1.0}, 0.0,
                 particleType, simulationInfo2D);
@@ -833,6 +862,10 @@ public final class ParticleMovementHarness {
             throw new AssertionError("expected 2D bottom-wall event");
         }
         assertClose("Java 2D departing wall time", bottomWall2D.colTime, 4.0);
+        departing2D.boundaryCollide(bottomWall2D, piston2D, new Thermostat(false));
+        assertClose("Java 2D departing wall y", departing2D.getY(), 1.0);
+        assertClose("Java 2D departing wall vy", departing2D.getYVel(), 1.0);
+        piston2D.MoveToTime(14.0);
 
         SimulationInfo simulationInfo3D = createSimulationInfo(
                 particleType, 3, 20.0, 20.0, 20.0,
@@ -850,6 +883,13 @@ public final class ParticleMovementHarness {
             throw new AssertionError("3D top wall should win exact piston tie");
         }
         assertClose("Java 3D piston/wall tie time", selected3D.colTime, 14.0);
+        Calendar calendar3D = new Calendar(1);
+        EventInfo scheduled3D = queueBoundaryEvent(
+                calendar3D, selected3D, Collision.PISTON_ALL);
+        assertClose("Java 3D calendar tie time", scheduled3D.colTime, 14.0);
+        catching3D.boundaryCollide(scheduled3D, piston3D, new Thermostat(false));
+        assertClose("Java 3D scheduled wall y", catching3D.getY(), 19.0);
+        assertClose("Java 3D scheduled wall vy", catching3D.getYVel(), -1.0);
         Particle3D departing3D = new Particle3D(
                 new double[]{5.0, 5.0, 5.0}, new double[]{0.0, -1.0, 0.0}, 0.0,
                 particleType, simulationInfo3D);
@@ -861,10 +901,79 @@ public final class ParticleMovementHarness {
             throw new AssertionError("expected 3D bottom-wall event");
         }
         assertClose("Java 3D departing wall time", bottomWall3D.colTime, 4.0);
+        departing3D.boundaryCollide(bottomWall3D, piston3D, new Thermostat(false));
+        assertClose("Java 3D departing wall y", departing3D.getY(), 1.0);
+        assertClose("Java 3D departing wall vy", departing3D.getYVel(), 1.0);
+        piston3D.MoveToTime(14.0);
 
         System.out.println(
                 "Piston event ordering PASS: 1D/2D/3D stopped-piston ties select the wall; "
                 + "departing particles have no piston event");
+    }
+
+    private static EventInfo queueBoundaryEvent(
+            Calendar calendar, EventInfo prediction, int updateAction) {
+        calendar.MarkEventToUpdate(new EventInfo(updateAction));
+        calendar.Update(
+                prediction.colType,
+                prediction.part1,
+                prediction.part2,
+                prediction.side,
+                prediction.colTime,
+                prediction.particlesInvolved);
+        calendar.FindMinimum();
+        return calendar.NextEvent();
+    }
+
+    private static void testFiniteSystemKineticEnergyCorrection() {
+        double temperature = 300.0;
+        double particleMassKg = 2.0e-26;
+        double totalMassKg = 1.0e-25;
+        int totalParticles = 6;
+        for (int dimension = 1; dimension <= 3; dimension++) {
+            double uncorrected = Formulas.avgKineticEnergy(temperature, dimension);
+            double corrected = Formulas.correctedKE(
+                    particleMassKg,
+                    temperature,
+                    dimension,
+                    totalParticles,
+                    totalMassKg);
+            assertCloseRelative(
+                    "Java uncorrected mean KE " + dimension + "D",
+                    uncorrected,
+                    dimension * 1.3806504e-23 * temperature / 2.0);
+            assertCloseRelative(
+                    "Java finite-corrected mean KE " + dimension + "D",
+                    corrected,
+                    uncorrected * 0.96);
+            double width = Formulas.KEWidth(temperature, particleMassKg, dimension);
+            double correctedWidth = Formulas.correctedKEWidth(
+                    temperature,
+                    particleMassKg,
+                    dimension,
+                    false,
+                    totalParticles,
+                    totalMassKg);
+            double periodicCorrectedWidth = Formulas.correctedKEWidth(
+                    temperature,
+                    particleMassKg,
+                    dimension,
+                    true,
+                    totalParticles,
+                    totalMassKg);
+            assertCloseRelative(
+                    "Java corrected KE width ignores periodic flag " + dimension + "D",
+                    correctedWidth,
+                    periodicCorrectedWidth);
+            System.out.printf(Locale.ROOT,
+                    "Finite-system KE %dD: baseline=%.15g J corrected=%.15g J%n",
+                    dimension, uncorrected, corrected);
+            System.out.printf(Locale.ROOT,
+                    "Finite-system KE width %dD: baseline=%.15g J corrected=%.15g J%n",
+                    dimension, width, correctedWidth);
+        }
+        System.out.println(
+                "Finite-system kinetic-energy mean and width corrections PASS in 1D/2D/3D");
     }
 
     private static void testTwoDimensionalIsothermalPistonAndThermostat() {
