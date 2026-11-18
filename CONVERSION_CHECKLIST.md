@@ -17,7 +17,8 @@ This checklist tracks feature parity between the Java application and the Python
 - [x] Adiabatic/isothermal piston mode switching and isothermal coupling to wall-thermostat energy tracking.
 - [ ] Compare each implemented behavior against Java, including edge cases and collision ordering.
 - [x] Compare controlled 1D/2D/3D isothermal piston impacts and following thermostat-adjusted wall collisions against Java particle methods.
-- [ ] Compare piston event ordering and edge cases against Java. Java's main physics source still contains a TODO for piston-particle interaction, so verify intended behavior before claiming parity.
+- [x] Compare 1D/2D/3D piston prediction when the piston stops before a particle catches it, an exact piston/wall event tie, and a particle moving away from the piston against Java's particle boundary predictor.
+- [ ] Verify full piston event-calendar scheduling against Java. `Physics.java` still has a TODO for the `PISTON_ALL` update path, so the direct particle-predictor comparisons above do not establish full scheduler parity.
 - [ ] Port remaining Java physics/statistics corrections, including finite-system and real-gas corrections where the Java application uses them.
 - [ ] Add support for multiple particle types and reaction relationships throughout the simulation model.
 - [ ] Replace or benchmark Python's all-pairs event search if it is too slow at the particle counts the application needs. Python currently recomputes candidate events instead of using Java's event calendar.

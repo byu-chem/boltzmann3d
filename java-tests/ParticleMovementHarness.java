@@ -56,6 +56,7 @@ public final class ParticleMovementHarness {
         testPeriodicParticleCollisionAcrossBoundary();
         testOneDimensionalWallHandling();
         testOneDimensionalIsothermalPistonAndThermostat();
+        testOneDimensionalPistonEventOrdering();
         testTwoDimensionalIsothermalPistonAndThermostat();
         testThreeDimensionalIsothermalPistonAndThermostat();
         testTwoDimensionalWallHandling();
@@ -763,6 +764,107 @@ public final class ParticleMovementHarness {
         System.out.printf(Locale.ROOT,
                 "Thermostat wall: event=%.15g x=%.15g vx=%.15g deltaKE=%.15g J%n",
                 wallTime, particle.getX(), particle.getXVel(), thermostat.getDeltaKE());
+    }
+
+    private static void testOneDimensionalPistonEventOrdering() {
+        ParticleType particleType = new ParticleType(1.0, 1.0, Color.RED, "piston-test");
+        SimulationInfo simulationInfo = createSimulationInfo(
+                particleType, 1, 20.0, 0.0, 0.0,
+                SimulationInfo.ArenaType.MOVABLE_PISTON);
+        Piston piston = new Piston(0.0, 0.0, 0.5, simulationInfo);
+        piston.setSpeed(2.0);
+        piston.setTargetLevel(0.0);
+
+        // The piston moves away, stops at x=20 at t=5, and is caught at t=14.
+        // That is also when the particle reaches the right wall. The Java
+        // boundary predictor keeps the wall event on an exact time tie.
+        Particle1D catching = new Particle1D(
+                new double[]{5.0}, new double[]{1.0}, 0.0,
+                particleType, simulationInfo);
+        EventInfo pistonEvent = catching.predPistonCol(piston);
+        assertClose("Java piston stop then catch time", pistonEvent.colTime, 14.0);
+        EventInfo selected = catching.predBoundaryCol(piston, false);
+        if (selected.colType != Collision.WALL || selected.side != Wall.RIGHT) {
+            throw new AssertionError(
+                    "wall should win an exact piston/wall tie, got type="
+                    + selected.colType + " side=" + selected.side);
+        }
+        assertClose("Java piston/wall tied event time", selected.colTime, 14.0);
+
+        // A particle moving left separates from the right-moving piston, so
+        // its only predicted event is the left arena wall.
+        Particle1D departing = new Particle1D(
+                new double[]{5.0}, new double[]{-1.0}, 0.0,
+                particleType, simulationInfo);
+        EventInfo noPistonEvent = departing.predPistonCol(piston);
+        if (noPistonEvent.colTime != Calendar.MAXTIME) {
+            throw new AssertionError("particle moving away should have no piston event");
+        }
+        EventInfo leftWall = departing.predBoundaryCol(piston, false);
+        if (leftWall.colType != Collision.WALL || leftWall.side != Wall.LEFT) {
+            throw new AssertionError("expected the departing particle's left-wall event");
+        }
+        assertClose("Java departing particle wall time", leftWall.colTime, 4.0);
+
+        SimulationInfo simulationInfo2D = createSimulationInfo(
+                particleType, 2, 20.0, 20.0, 0.0,
+                SimulationInfo.ArenaType.MOVABLE_PISTON);
+        Piston piston2D = new Piston(0.0, 0.0, 0.5, simulationInfo2D);
+        piston2D.setSpeed(2.0);
+        piston2D.setTargetLevel(0.0);
+        Particle2D catching2D = new Particle2D(
+                new double[]{5.0, 5.0}, new double[]{0.0, 1.0}, 0.0,
+                particleType, simulationInfo2D);
+        EventInfo pistonEvent2D = catching2D.predPistonCol(piston2D);
+        assertClose("Java 2D piston stop then catch time", pistonEvent2D.colTime, 14.0);
+        EventInfo selected2D = catching2D.predBoundaryCol(piston2D, false);
+        if (selected2D.colType != Collision.WALL || selected2D.side != Wall.TOP) {
+            throw new AssertionError("2D top wall should win exact piston tie");
+        }
+        assertClose("Java 2D piston/wall tie time", selected2D.colTime, 14.0);
+        Particle2D departing2D = new Particle2D(
+                new double[]{5.0, 5.0}, new double[]{0.0, -1.0}, 0.0,
+                particleType, simulationInfo2D);
+        if (departing2D.predPistonCol(piston2D).colTime != Calendar.MAXTIME) {
+            throw new AssertionError("2D particle moving away should have no piston event");
+        }
+        EventInfo bottomWall2D = departing2D.predBoundaryCol(piston2D, false);
+        if (bottomWall2D.colType != Collision.WALL || bottomWall2D.side != Wall.BOTTOM) {
+            throw new AssertionError("expected 2D bottom-wall event");
+        }
+        assertClose("Java 2D departing wall time", bottomWall2D.colTime, 4.0);
+
+        SimulationInfo simulationInfo3D = createSimulationInfo(
+                particleType, 3, 20.0, 20.0, 20.0,
+                SimulationInfo.ArenaType.MOVABLE_PISTON);
+        Piston piston3D = new Piston(0.0, 0.0, 0.5, simulationInfo3D);
+        piston3D.setSpeed(2.0);
+        piston3D.setTargetLevel(0.0);
+        Particle3D catching3D = new Particle3D(
+                new double[]{5.0, 5.0, 5.0}, new double[]{0.0, 1.0, 0.0}, 0.0,
+                particleType, simulationInfo3D);
+        EventInfo pistonEvent3D = catching3D.predPistonCol(piston3D);
+        assertClose("Java 3D piston stop then catch time", pistonEvent3D.colTime, 14.0);
+        EventInfo selected3D = catching3D.predBoundaryCol(piston3D, false);
+        if (selected3D.colType != Collision.WALL || selected3D.side != Wall.TOP) {
+            throw new AssertionError("3D top wall should win exact piston tie");
+        }
+        assertClose("Java 3D piston/wall tie time", selected3D.colTime, 14.0);
+        Particle3D departing3D = new Particle3D(
+                new double[]{5.0, 5.0, 5.0}, new double[]{0.0, -1.0, 0.0}, 0.0,
+                particleType, simulationInfo3D);
+        if (departing3D.predPistonCol(piston3D).colTime != Calendar.MAXTIME) {
+            throw new AssertionError("3D particle moving away should have no piston event");
+        }
+        EventInfo bottomWall3D = departing3D.predBoundaryCol(piston3D, false);
+        if (bottomWall3D.colType != Collision.WALL || bottomWall3D.side != Wall.BOTTOM) {
+            throw new AssertionError("expected 3D bottom-wall event");
+        }
+        assertClose("Java 3D departing wall time", bottomWall3D.colTime, 4.0);
+
+        System.out.println(
+                "Piston event ordering PASS: 1D/2D/3D stopped-piston ties select the wall; "
+                + "departing particles have no piston event");
     }
 
     private static void testTwoDimensionalIsothermalPistonAndThermostat() {

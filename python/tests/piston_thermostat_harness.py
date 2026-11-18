@@ -98,6 +98,62 @@ def run_dimension_case(
     )
 
 
+def run_piston_event_edge_cases() -> None:
+    for dimension in (1, 2, 3):
+        piston_axis = 0 if dimension == 1 else 1
+        position = [5.0] * dimension
+        velocity = [0.0] * dimension
+        velocity[piston_axis] = 1.0
+        catching_particle = Particle(
+            tuple(position), tuple(velocity), mass=1.0, radius=1.0
+        )
+        catching_simulation = Simulation(
+            [catching_particle],
+            (20.0,) * dimension,
+            piston=Piston(
+                20.0, current_level=0.5, target_level=0.0, speed=2.0
+            ),
+        )
+
+        # The piston moves away, stops at 20 at t=5, and is caught at t=14,
+        # exactly when the particle reaches the corresponding arena wall.
+        piston_event = catching_simulation._predict_piston_event(
+            0, catching_particle
+        )
+        if piston_event is None:
+            raise AssertionError(f"{dimension}D expected a piston event after it stops")
+        _assert_close(f"{dimension}D piston stop then catch time", piston_event.time, 14.0)
+        event = catching_simulation.next_event()
+        if event is None or event.kind != "wall":
+            raise AssertionError(f"{dimension}D wall should win piston/wall tie, got {event}")
+        _assert_close(f"{dimension}D piston/wall tied event time", event.time, 14.0)
+
+        # A particle moving away from the expanding piston has no piston
+        # collision; its next event is the wall behind it.
+        departing_velocity = [0.0] * dimension
+        departing_velocity[piston_axis] = -1.0
+        departing_particle = Particle(
+            tuple(position), tuple(departing_velocity), mass=1.0, radius=1.0
+        )
+        departing_simulation = Simulation(
+            [departing_particle],
+            (20.0,) * dimension,
+            piston=Piston(
+                20.0, current_level=0.5, target_level=0.0, speed=2.0
+            ),
+        )
+        if departing_simulation._predict_piston_event(0, departing_particle) is not None:
+            raise AssertionError(f"{dimension}D departing particle must not hit the piston")
+        event = departing_simulation.next_event()
+        if event is None or event.kind != "wall":
+            raise AssertionError(f"{dimension}D expected a wall event, got {event}")
+        _assert_close(f"{dimension}D departing particle wall time", event.time, 4.0)
+        print(
+            f"{dimension}D piston edges PASS: stop/catch and wall tie at 14.0; "
+            "moving-away case has no piston event"
+        )
+
+
 def main() -> None:
     run_dimension_case(1, (5.0,), (1.0,), (20.0,))
     run_dimension_case(2, (5.0, 5.0), (0.5, 1.0), (20.0, 20.0))
@@ -107,6 +163,7 @@ def main() -> None:
         (0.5, 1.0, 0.25),
         (20.0, 20.0, 20.0),
     )
+    run_piston_event_edge_cases()
 
 
 if __name__ == "__main__":
