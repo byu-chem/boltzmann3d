@@ -46,6 +46,30 @@ public final class FiniteSystemSpeedHarness {
                 throw new AssertionError(
                         "Corrected RMS-speed behavior changed in " + dimension + "D");
             }
+            double correctedVelocityWidth = Formulas.correctedVelocityWidth(
+                    temperature,
+                    particleMassKg,
+                    dimension,
+                    false,
+                    totalParticles,
+                    totalMassKg);
+            boolean periodicVelocityWidthUnsupported = false;
+            try {
+                Formulas.correctedVelocityWidth(
+                        temperature,
+                        particleMassKg,
+                        dimension,
+                        true,
+                        totalParticles,
+                        totalMassKg);
+            } catch (UnsupportedOperationException expected) {
+                periodicVelocityWidthUnsupported = true;
+            }
+            if (!periodicVelocityWidthUnsupported) {
+                throw new AssertionError(
+                        "Periodic corrected velocity width should remain unsupported in "
+                        + dimension + "D");
+            }
             System.out.printf(
                     Locale.ROOT,
                     "Finite-system average speed %dD: baseline=%.15g m/s "
@@ -61,6 +85,12 @@ public final class FiniteSystemSpeedHarness {
                     dimension,
                     rmsBaseline,
                     rmsNonperiodic);
+            System.out.printf(
+                    Locale.ROOT,
+                    "Finite-system corrected velocity width %dD: "
+                    + "nonperiodic=%.15g m/s periodic=unsupported%n",
+                    dimension,
+                    correctedVelocityWidth);
         }
         System.out.println("Finite-system RMS-speed behavior matches Java in 1D/2D/3D");
     }

@@ -121,6 +121,37 @@ def finite_system_corrected_rms_speed_meters_per_second(
     return rms_speed_meters_per_second(temperature_kelvin, mass_kg, dimension)
 
 
+def finite_system_corrected_velocity_width_meters_per_second(
+    temperature_kelvin: float,
+    mass_kg: float,
+    dimension: int,
+    periodic: bool,
+    total_particles: int,
+    total_mass_kg: float,
+) -> float:
+    """Return Java's finite-system corrected width of the speed distribution.
+
+    Java calculates this as ``sqrt(corrected_rms_speed**2 -
+    corrected_average_speed**2)``. Its corrected RMS speed is unsupported for
+    periodic arenas, so this function preserves that behavior.
+    """
+    corrected_rms_speed = finite_system_corrected_rms_speed_meters_per_second(
+        temperature_kelvin,
+        mass_kg,
+        dimension,
+        periodic,
+    )
+    corrected_average_speed = finite_system_corrected_average_speed_meters_per_second(
+        temperature_kelvin,
+        mass_kg,
+        dimension,
+        periodic,
+        total_particles,
+        total_mass_kg,
+    )
+    return sqrt(corrected_rms_speed**2 - corrected_average_speed**2)
+
+
 def _java_gamma(value: float) -> float:
     """Reproduce the recursive ``Formulas.gamma`` used by Java's gammaFrac."""
     if value <= 0.0:

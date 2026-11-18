@@ -12,6 +12,7 @@ from .thermodynamics import (
     finite_system_corrected_kinetic_energy_joules,
     finite_system_corrected_kinetic_energy_width_joules,
     finite_system_corrected_rms_speed_meters_per_second,
+    finite_system_corrected_velocity_width_meters_per_second,
     kinetic_energy_width_joules,
     rms_speed_meters_per_second,
 )
@@ -32,6 +33,7 @@ __all__ = [
     "finite_system_corrected_kinetic_energy_joules",
     "finite_system_corrected_kinetic_energy_width_joules",
     "finite_system_corrected_rms_speed_meters_per_second",
+    "finite_system_corrected_velocity_width_meters_per_second",
     "kinetic_energy_width_joules",
     "rms_speed_meters_per_second",
     "WallThermostat",

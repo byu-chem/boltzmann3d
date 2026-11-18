@@ -24,7 +24,7 @@ This checklist tracks feature parity between the Java application and the Python
 - [x] Port and compare Java's finite-system correction for kinetic-energy width in 1D/2D/3D.
 - [x] Port and compare Java's finite-system corrected average-speed prediction in 1D/2D/3D.
 - [x] Match Java's corrected RMS-speed behavior: ordinary RMS speed for nonperiodic arenas; periodic prediction remains unsupported.
-- [ ] Port and compare corrected velocity-width predictions.
+- [x] Port and compare Java's finite-system corrected velocity-width prediction in 1D/2D/3D; periodic prediction remains unsupported because corrected RMS speed is unsupported.
 - [ ] Port Java real-gas corrections where the statistics use them.
 - [ ] Add support for multiple particle types and reaction relationships throughout the simulation model.
 - [ ] Replace or benchmark Python's all-pairs event search if it is too slow at the particle counts the application needs. Python currently recomputes candidate events instead of using Java's event calendar.

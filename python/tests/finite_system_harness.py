@@ -13,6 +13,7 @@ from boltzmann3d.physics import (
     finite_system_corrected_kinetic_energy_joules,
     finite_system_corrected_kinetic_energy_width_joules,
     finite_system_corrected_rms_speed_meters_per_second,
+    finite_system_corrected_velocity_width_meters_per_second,
     kinetic_energy_width_joules,
     rms_speed_meters_per_second,
 )
@@ -28,6 +29,11 @@ def main() -> None:
         1: (363.101089925494, 378.479156506206, 373.886149783594),
         2: (570.357858310189, 582.351025762768, 572.957651363804),
         3: (726.202179850988, 736.353447703554, 723.479238257995),
+    }
+    java_corrected_velocity_width_outputs = {
+        1: 252.687728412661,
+        2: 273.975186454999,
+        3: 281.205049839241,
     }
     for dimension in range(1, 4):
         baseline = average_kinetic_energy_joules(temperature, dimension)
@@ -135,8 +141,44 @@ def main() -> None:
             f"Finite-system RMS speed {dimension}D: "
             f"nonperiodic={corrected_rms_speed:.15g} m/s periodic=unsupported"
         )
+        corrected_velocity_width = (
+            finite_system_corrected_velocity_width_meters_per_second(
+                temperature,
+                particle_mass_kg,
+                dimension,
+                False,
+                total_particles,
+                total_mass_kg,
+            )
+        )
+        expected_width = java_corrected_velocity_width_outputs[dimension]
+        if abs(corrected_velocity_width - expected_width) > abs(expected_width) * 1e-12:
+            raise AssertionError(
+                f"{dimension}D corrected velocity width differs from Java: "
+                f"expected {expected_width}, got {corrected_velocity_width}"
+            )
+        try:
+            finite_system_corrected_velocity_width_meters_per_second(
+                temperature,
+                particle_mass_kg,
+                dimension,
+                True,
+                total_particles,
+                total_mass_kg,
+            )
+        except NotImplementedError:
+            pass
+        else:
+            raise AssertionError(
+                f"{dimension}D periodic corrected velocity width should remain unsupported"
+            )
+        print(
+            f"Finite-system corrected velocity width {dimension}D: "
+            f"nonperiodic={corrected_velocity_width:.15g} m/s periodic=unsupported"
+        )
     print("Finite-system average-speed comparison PASS in 1D/2D/3D")
     print("Finite-system RMS-speed behavior matches Java in 1D/2D/3D")
+    print("Finite-system corrected velocity width matches Java in 1D/2D/3D")
     print("Finite-system kinetic-energy correction PASS in 1D/2D/3D")
 
 
