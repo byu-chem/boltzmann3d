@@ -110,6 +110,57 @@ def real_gas_effective_volume(
     return effective_length * effective_height * effective_depth
 
 
+def real_gas_x(
+    target_type_index: int,
+    particle_radii: tuple[float, ...],
+    particle_counts: tuple[int, ...],
+    arena_sizes: tuple[float, ...],
+    periodic: bool = False,
+    divided: bool = False,
+    divider_radius: float = 1.0e-9,
+) -> float:
+    """Return Java's ``Formulas.realGasX`` for a particle type.
+
+    Each index identifies one particle type across ``particle_radii`` and
+    ``particle_counts``. Length values must use the same unit. For a
+    nonperiodic arena Java excludes the target particle from collisions with
+    its own type; periodic arenas retain the full same-type count.
+    """
+    if len(particle_radii) != len(particle_counts):
+        raise ValueError("Particle radii and counts must have the same number of types")
+    if not 0 <= target_type_index < len(particle_counts):
+        raise ValueError("Target particle type index is out of range")
+    if particle_counts[target_type_index] == 0:
+        return 0.0
+
+    target_radius = particle_radii[target_type_index]
+    total_x = 0.0
+    for collision_type_index, (collision_radius, collision_count) in enumerate(
+        zip(particle_radii, particle_counts)
+    ):
+        available_collisions = collision_count - (
+            1 if collision_type_index == target_type_index and not periodic else 0
+        )
+        b2 = real_gas_b2(target_radius, collision_radius, len(arena_sizes))
+        b2_correction = real_gas_b2_correction(
+            target_radius,
+            collision_radius,
+            arena_sizes,
+            periodic=periodic,
+            divided=divided,
+            divider_radius=divider_radius,
+        )
+        effective_volume = real_gas_effective_volume(
+            arena_sizes,
+            collision_radius,
+            periodic=periodic,
+            divided=divided,
+            divider_radius=divider_radius,
+        )
+        total_x += b2 * b2_correction * available_collisions / effective_volume
+    return total_x
+
+
 def average_kinetic_energy_joules(temperature_kelvin: float, dimension: int) -> float:
     """Return Java's equipartition prediction for mean kinetic energy."""
     return (

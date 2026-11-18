@@ -20,6 +20,7 @@ from boltzmann3d.physics import (
     real_gas_b2,
     real_gas_b2_correction,
     real_gas_effective_volume,
+    real_gas_x,
 )
 
 
@@ -111,6 +112,36 @@ def main() -> None:
                 f"expected {expected}, got {actual}"
             )
         print(f"Effective volume {label}: {actual:.15g}")
+    java_real_gas_x_outputs = {
+        "2D reflecting": (0.00380055226217230, 0.00701789749308668),
+        "3D reflecting": (0.000207990969834389, 0.000494729293258400),
+        "2D periodic": (0.00409529042342955, 0.00973332723924695),
+        "3D divided": (0.000438489315678449, 0.00103029727129079),
+        "3D divided with hole": (0.000207990969834389, 0.000494729293258400),
+    }
+    real_gas_x_cases = {
+        "2D reflecting": ((70e-9, 50e-9), False, False),
+        "3D reflecting": ((70e-9, 50e-9, 40e-9), False, False),
+        "2D periodic": ((70e-9, 50e-9), True, False),
+        "3D divided": ((70e-9, 50e-9, 40e-9), False, True),
+        "3D divided with hole": ((70e-9, 50e-9, 40e-9), False, False),
+    }
+    for label, (arena_sizes, periodic, divided) in real_gas_x_cases.items():
+        for target_type_index, expected in enumerate(java_real_gas_x_outputs[label]):
+            actual = real_gas_x(
+                target_type_index,
+                (0.5e-9, 1.25e-9),
+                (3, 2),
+                arena_sizes,
+                periodic=periodic,
+                divided=divided,
+            )
+            if abs(actual - expected) > abs(expected) * 1e-12:
+                raise AssertionError(
+                    f"Real-gas X {label} target type {target_type_index} differs from Java: "
+                    f"expected {expected}, got {actual}"
+                )
+            print(f"Real-gas X {label} target type {target_type_index}: {actual:.15g}")
     for dimension, expected in java_real_gas_b2_outputs.items():
         actual = real_gas_b2(0.5e-9, 1.25e-9, dimension)
         if abs(actual - expected) > abs(expected) * 1e-12:
@@ -283,6 +314,7 @@ def main() -> None:
     print("Real-gas B2 comparison PASS in 1D/2D/3D")
     print("Real-gas B2 correction comparison PASS for arena cases")
     print("Effective-volume comparison PASS for arena cases")
+    print("Real-gas X comparison PASS for multi-type arena cases")
 
 
 if __name__ == "__main__":
