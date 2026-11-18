@@ -16,6 +16,9 @@ from boltzmann3d.physics import (
     finite_system_corrected_velocity_width_meters_per_second,
     kinetic_energy_width_joules,
     rms_speed_meters_per_second,
+    real_gas_correction_factor,
+    real_gas_b2,
+    real_gas_b2_correction,
 )
 
 
@@ -35,6 +38,69 @@ def main() -> None:
         2: 273.975186454999,
         3: 281.205049839241,
     }
+    java_real_gas_qx_outputs = {
+        2: (1.0, 1.08387741769214, 1.58317918503777, 3.10710296770546),
+        3: (1.0, 1.06548376262379, 1.40092972649603, 2.08017365697687),
+    }
+    java_real_gas_b2_outputs = {
+        1: 1.75e-9,
+        2: 4.81056375080937e-18,
+        3: 1.12246487518885e-26,
+    }
+    java_real_gas_b2_correction_outputs = {
+        "1D reflecting": 1.0,
+        "2D reflecting": 0.963473940560410,
+        "3D reflecting": 0.948829136283382,
+        "2D periodic": 1.0,
+        "3D divided": 0.936055552411030,
+        "3D divided with hole": 0.948829136283382,
+    }
+    b2_correction_cases = {
+        "1D reflecting": ((70e-9,), False, False),
+        "2D reflecting": ((70e-9, 50e-9), False, False),
+        "3D reflecting": ((70e-9, 50e-9, 40e-9), False, False),
+        "2D periodic": ((70e-9, 50e-9), True, False),
+        "3D divided": ((70e-9, 50e-9, 40e-9), False, True),
+        "3D divided with hole": ((70e-9, 50e-9, 40e-9), False, False),
+    }
+    for label, (arena_sizes, periodic, divided) in b2_correction_cases.items():
+        actual = real_gas_b2_correction(
+            0.5e-9,
+            1.25e-9,
+            arena_sizes,
+            periodic=periodic,
+            divided=divided,
+        )
+        expected = java_real_gas_b2_correction_outputs[label]
+        if abs(actual - expected) > abs(expected) * 1e-12:
+            raise AssertionError(
+                f"Real-gas B2 correction {label} differs from Java: "
+                f"expected {expected}, got {actual}"
+            )
+        print(f"Real-gas B2 correction {label}: {actual:.15g}")
+    for dimension, expected in java_real_gas_b2_outputs.items():
+        actual = real_gas_b2(0.5e-9, 1.25e-9, dimension)
+        if abs(actual - expected) > abs(expected) * 1e-12:
+            raise AssertionError(
+                f"{dimension}D real-gas B2 differs from Java: "
+                f"expected {expected}, got {actual}"
+            )
+        print(f"Real-gas B2 {dimension}D: {actual:.15g}")
+    for dimension, expected_values in java_real_gas_qx_outputs.items():
+        for x, expected in zip((0.0, 0.1, 0.5, 1.0), expected_values):
+            actual = real_gas_correction_factor(x, dimension)
+            if abs(actual - expected) > abs(expected) * 1e-12:
+                raise AssertionError(
+                    f"{dimension}D real-gas Q({x}) differs from Java: "
+                    f"expected {expected}, got {actual}"
+                )
+            print(f"Real-gas Q(x) {dimension}D x={x:.1f}: {actual:.15g}")
+    try:
+        real_gas_correction_factor(0.1, 1)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Real-gas Q(x) should reject dimensions other than 2D and 3D")
     for dimension in range(1, 4):
         baseline = average_kinetic_energy_joules(temperature, dimension)
         corrected = finite_system_corrected_kinetic_energy_joules(
@@ -180,6 +246,9 @@ def main() -> None:
     print("Finite-system RMS-speed behavior matches Java in 1D/2D/3D")
     print("Finite-system corrected velocity width matches Java in 1D/2D/3D")
     print("Finite-system kinetic-energy correction PASS in 1D/2D/3D")
+    print("Real-gas Q(x) comparison PASS in 2D/3D")
+    print("Real-gas B2 comparison PASS in 1D/2D/3D")
+    print("Real-gas B2 correction comparison PASS for arena cases")
 
 
 if __name__ == "__main__":

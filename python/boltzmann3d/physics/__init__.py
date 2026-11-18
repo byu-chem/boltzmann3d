@@ -15,6 +15,9 @@ from .thermodynamics import (
     finite_system_corrected_velocity_width_meters_per_second,
     kinetic_energy_width_joules,
     rms_speed_meters_per_second,
+    real_gas_correction_factor,
+    real_gas_b2,
+    real_gas_b2_correction,
 )
 from .thermostat import WallThermostat
 
@@ -36,5 +39,8 @@ __all__ = [
     "finite_system_corrected_velocity_width_meters_per_second",
     "kinetic_energy_width_joules",
     "rms_speed_meters_per_second",
+    "real_gas_correction_factor",
+    "real_gas_b2",
+    "real_gas_b2_correction",
     "WallThermostat",
 ]

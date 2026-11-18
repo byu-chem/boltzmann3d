@@ -5,6 +5,80 @@ from math import exp, inf, isfinite, log, pi, sqrt
 BOLTZMANN_CONSTANT_JOULES_PER_KELVIN = 1.3806504e-23
 
 
+def real_gas_correction_factor(x: float, dimension: int) -> float:
+    """Return Java's ``Formulas.realGasQx`` correction for 2D or 3D.
+
+    The correction is a rational polynomial fit. Computing ``x`` from arena
+    and particle data is a separate step.
+    """
+    if dimension == 2:
+        e1, e2, e3 = -0.25233539, 0.02704323, 0.00077137
+        f1, f2, f3 = -1.03433982, 0.30366975, -0.01974721
+    elif dimension == 3:
+        e1, e2, e3 = 1.30542183, 0.11627913, 0.02452331
+        f1, f2, f3 = 0.68042183, -0.59593402, 0.09148337
+    else:
+        raise ValueError("Java's real-gas correction factor supports only 2D and 3D")
+    return (1.0 + e1 * x + e2 * x**2 + e3 * x**3) / (
+        1.0 + f1 * x + f2 * x**2 + f3 * x**3
+    )
+
+
+def real_gas_b2(radius1: float, radius2: float, dimension: int) -> float:
+    """Return Java's pairwise second-virial term ``Formulas.realGasB2``."""
+    radii_sum = radius1 + radius2
+    if dimension == 1:
+        return radii_sum
+    if dimension == 2:
+        return pi * radii_sum * radii_sum / 2.0
+    # Java's switch uses the 3D expression as its default branch.
+    return (2.0 / 3.0) * pi * radii_sum * radii_sum * radii_sum
+
+
+def real_gas_b2_correction(
+    radius1: float,
+    radius2: float,
+    arena_sizes: tuple[float, ...],
+    periodic: bool = False,
+    divided: bool = False,
+    divider_radius: float = 1.0e-9,
+) -> float:
+    """Return Java's finite-arena multiplier for the pairwise ``B2`` term.
+
+    Radii, arena lengths, and divider radius must use the same length unit.
+    Java returns 1 in 1D and for periodic arenas. In divided arenas it halves
+    the usable X length and subtracts the divider radius, including for
+    ``DIVIDED_ARENA`` (not the divided arena with a hole).
+    """
+    dimension = len(arena_sizes)
+    if dimension not in (1, 2, 3):
+        raise ValueError("Real-gas B2 correction requires a 1D, 2D, or 3D arena")
+    if dimension == 1 or periodic:
+        return 1.0
+
+    sigma = radius1 + radius2
+    lengths = list(arena_sizes)
+    if divided:
+        lengths[0] = lengths[0] / 2.0 - divider_radius
+
+    if dimension == 2:
+        lx, ly = lengths
+        return (
+            1.0
+            - (2.0 / pi) * (sigma / lx + sigma / ly)
+            + (6.0 / pi) * ((sigma / lx) * (sigma / ly))
+        )
+
+    lx, ly, lz = lengths
+    return (
+        1.0
+        - (sigma / 2.0) * (1.0 / lx + 1.0 / ly + 1.0 / lz)
+        + (11.0 * sigma * sigma / (20.0 * pi))
+        * (1.0 / (lx * ly) + 1.0 / (lx * lz) + 1.0 / (ly * lz))
+        + (15.0 * sigma**3 / (2.0 * pi * lx * ly * lz))
+    )
+
+
 def average_kinetic_energy_joules(temperature_kelvin: float, dimension: int) -> float:
     """Return Java's equipartition prediction for mean kinetic energy."""
     return (

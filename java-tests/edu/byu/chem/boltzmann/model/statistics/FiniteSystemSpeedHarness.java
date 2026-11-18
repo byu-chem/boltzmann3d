@@ -1,5 +1,7 @@
 package edu.byu.chem.boltzmann.model.statistics;
 
+import edu.byu.chem.boltzmann.utils.data.ParticleType;
+import java.awt.Color;
 import java.util.Locale;
 
 /** Standalone output for comparing Java's finite-system average-speed formulas. */
@@ -13,6 +15,33 @@ public final class FiniteSystemSpeedHarness {
         double particleMassKg = 2.0e-26;
         double totalMassKg = 1.0e-25;
         int totalParticles = 6;
+
+        double radius1 = 0.5e-9;
+        double radius2 = 1.25e-9;
+        for (int dimension = 1; dimension <= 3; dimension++) {
+            System.out.printf(
+                    Locale.ROOT,
+                    "Real-gas B2 %dD radii=%.3g,%.3g m: %.15g%n",
+                    dimension,
+                    radius1,
+                    radius2,
+                    Formulas.realGasB2(
+                            new ParticleType(1.0, radius1, Color.RED, "Harness A"),
+                            new ParticleType(1.0, radius2, Color.BLUE, "Harness B"),
+                            dimension));
+        }
+
+        double[] realGasInputs = {0.0, 0.1, 0.5, 1.0};
+        for (int dimension = 2; dimension <= 3; dimension++) {
+            for (double x : realGasInputs) {
+                System.out.printf(
+                        Locale.ROOT,
+                        "Real-gas Q(x) %dD x=%.1f: %.15g%n",
+                        dimension,
+                        x,
+                        Formulas.realGasQx(x, dimension));
+            }
+        }
 
         for (int dimension = 1; dimension <= 3; dimension++) {
             double baseline = Formulas.averageVelocity(
