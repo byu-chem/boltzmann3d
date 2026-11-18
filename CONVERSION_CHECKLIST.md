@@ -29,6 +29,7 @@ This checklist tracks feature parity between the Java application and the Python
   - [x] Port and compare the 2D/3D `realGasQx` polynomial.
   - [x] Port and compare the 1D/2D/3D `realGasB2` pair-radius term.
   - [x] Port and compare the finite-arena `realGasB2Correction` for reflecting, periodic, divided, and divided-with-hole cases.
+  - [x] Port and compare Java's type-radius-adjusted effective volume in 1D/2D/3D arena cases.
 - [ ] Add support for multiple particle types and reaction relationships throughout the simulation model.
 - [ ] Replace or benchmark Python's all-pairs event search if it is too slow at the particle counts the application needs. Python currently recomputes candidate events instead of using Java's event calendar.
 

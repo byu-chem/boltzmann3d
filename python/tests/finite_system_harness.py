@@ -19,6 +19,7 @@ from boltzmann3d.physics import (
     real_gas_correction_factor,
     real_gas_b2,
     real_gas_b2_correction,
+    real_gas_effective_volume,
 )
 
 
@@ -78,6 +79,38 @@ def main() -> None:
                 f"expected {expected}, got {actual}"
             )
         print(f"Real-gas B2 correction {label}: {actual:.15g}")
+    java_effective_volume_outputs = {
+        "1D reflecting": 6.75e-8,
+        "1D periodic": 7.0e-8,
+        "2D reflecting": 3.20625e-15,
+        "2D periodic": 3.5e-15,
+        "3D reflecting": 1.20234375e-22,
+        "3D divided": 5.6109375e-23,
+        "3D divided with hole": 1.20234375e-22,
+    }
+    effective_volume_cases = {
+        "1D reflecting": ((70e-9,), False, False),
+        "1D periodic": ((70e-9,), True, False),
+        "2D reflecting": ((70e-9, 50e-9), False, False),
+        "2D periodic": ((70e-9, 50e-9), True, False),
+        "3D reflecting": ((70e-9, 50e-9, 40e-9), False, False),
+        "3D divided": ((70e-9, 50e-9, 40e-9), False, True),
+        "3D divided with hole": ((70e-9, 50e-9, 40e-9), False, False),
+    }
+    for label, (arena_sizes, periodic, divided) in effective_volume_cases.items():
+        actual = real_gas_effective_volume(
+            arena_sizes,
+            1.25e-9,
+            periodic=periodic,
+            divided=divided,
+        )
+        expected = java_effective_volume_outputs[label]
+        if abs(actual - expected) > abs(expected) * 1e-12:
+            raise AssertionError(
+                f"Effective volume {label} differs from Java: "
+                f"expected {expected}, got {actual}"
+            )
+        print(f"Effective volume {label}: {actual:.15g}")
     for dimension, expected in java_real_gas_b2_outputs.items():
         actual = real_gas_b2(0.5e-9, 1.25e-9, dimension)
         if abs(actual - expected) > abs(expected) * 1e-12:
@@ -249,6 +282,7 @@ def main() -> None:
     print("Real-gas Q(x) comparison PASS in 2D/3D")
     print("Real-gas B2 comparison PASS in 1D/2D/3D")
     print("Real-gas B2 correction comparison PASS for arena cases")
+    print("Effective-volume comparison PASS for arena cases")
 
 
 if __name__ == "__main__":

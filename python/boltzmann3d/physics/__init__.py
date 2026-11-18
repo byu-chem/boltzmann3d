@@ -18,6 +18,7 @@ from .thermodynamics import (
     real_gas_correction_factor,
     real_gas_b2,
     real_gas_b2_correction,
+    real_gas_effective_volume,
 )
 from .thermostat import WallThermostat
 
@@ -42,5 +43,6 @@ __all__ = [
     "real_gas_correction_factor",
     "real_gas_b2",
     "real_gas_b2_correction",
+    "real_gas_effective_volume",
     "WallThermostat",
 ]

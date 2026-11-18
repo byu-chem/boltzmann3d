@@ -79,6 +79,37 @@ def real_gas_b2_correction(
     )
 
 
+def real_gas_effective_volume(
+    arena_sizes: tuple[float, ...],
+    particle_radius: float,
+    periodic: bool = False,
+    divided: bool = False,
+    divider_radius: float = 1.0e-9,
+) -> float:
+    """Return Java's effective arena volume for a particle type.
+
+    Arena dimensions, particle radius, and divider radius must use the same
+    length unit. Reflecting walls remove one particle diameter from each axis;
+    periodic walls do not. A solid divided arena uses half the X length minus
+    the divider radius, matching Java's ``DIVIDED_ARENA`` branch.
+    """
+    dimension = len(arena_sizes)
+    if dimension not in (1, 2, 3):
+        raise ValueError("Effective volume requires a 1D, 2D, or 3D arena")
+    loss_to_radius = 0.0 if periodic else 2.0 * particle_radius
+    effective_x = arena_sizes[0]
+    if divided:
+        effective_x = effective_x / 2.0 - divider_radius
+    effective_length = effective_x - loss_to_radius
+    if dimension == 1:
+        return effective_length
+    effective_height = arena_sizes[1] - loss_to_radius
+    if dimension == 2:
+        return effective_length * effective_height
+    effective_depth = arena_sizes[2] - loss_to_radius
+    return effective_length * effective_height * effective_depth
+
+
 def average_kinetic_energy_joules(temperature_kelvin: float, dimension: int) -> float:
     """Return Java's equipartition prediction for mean kinetic energy."""
     return (
