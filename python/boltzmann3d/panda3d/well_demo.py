@@ -15,7 +15,7 @@ from panda3d.core import (
     WindowProperties,
 )
 
-from ..physics import Particle, Simulation
+from ..physics import Particle, Piston, Simulation
 
 
 class EnergyWellScene:
@@ -27,13 +27,15 @@ class EnergyWellScene:
     INTERACTION_RADIUS_MULTIPLIER = 2.0
     WELL_RADIUS = INTERACTION_RADIUS_MULTIPLIER * 2.0 * PARTICLE_RADIUS
     SIMULATION_SPEED = 1.0
+    PISTON_SPEED = 8.0
+    PISTON_COMPRESSED_LEVEL = 0.2
 
     def __init__(self, app: ShowBase) -> None:
         self.app = app
         self.root = app.render.attachNewNode("energy-well-demo")
         self.paused = False
-        self.mode = "pass"
         self.last_event = "Approaching the interaction well"
+        self.mode = "pass"
 
         self._add_lighting()
         self._add_arena_and_well_markers()
@@ -45,6 +47,7 @@ class EnergyWellScene:
         app.accept("2", self._reset_simulation, ["trap"])
         app.accept("r", self._reset_current_mode)
         app.accept("space", self._toggle_pause)
+        app.accept("p", self._toggle_piston)
 
     def _add_lighting(self) -> None:
         ambient = AmbientLight("well-demo-ambient")
@@ -86,6 +89,13 @@ class EnergyWellScene:
         markers.drawTo(marker_right, -0.05, self.ARENA_HEIGHT - 2.0)
         self.root.attachNewNode(markers.create())
 
+        piston_marker = LineSegs("movable-piston-marker")
+        piston_marker.setThickness(4.0)
+        piston_marker.setColor(1.0, 0.72, 0.25, 1.0)
+        piston_marker.moveTo(0.0, -0.08, 0.0)
+        piston_marker.drawTo(0.0, -0.08, self.ARENA_HEIGHT)
+        self.piston_marker = self.root.attachNewNode(piston_marker.create())
+
     def _add_particles(self) -> None:
         self.sphere_model = self.app.loader.loadModel("models/misc/sphere")
         self.particle_nodes = []
@@ -98,7 +108,7 @@ class EnergyWellScene:
 
     def _add_instructions(self) -> None:
         self.instructions = OnscreenText(
-            text="1: enter and exit well     2: trapped pair     SPACE: pause     R: reset",
+            text="1: pass     2: trapped     P: reverse piston direction     SPACE: pause     R: reset",
             pos=(-1.28, 0.92),
             scale=0.045,
             align=TextNode.ALeft,
@@ -147,6 +157,10 @@ class EnergyWellScene:
             particles,
             (self.ARENA_WIDTH,),
             interaction_radius_multiplier=self.INTERACTION_RADIUS_MULTIPLIER,
+            piston=Piston(
+                self.ARENA_WIDTH,
+                speed=self.PISTON_SPEED,
+            ),
         )
         self.mode_label = mode_label
         self._sync_particle_nodes()
@@ -155,11 +169,12 @@ class EnergyWellScene:
     def _sync_particle_nodes(self) -> None:
         for particle, node in zip(self.simulation.particles, self.particle_nodes):
             node.setPos(particle.position[0], 0.0, self.ARENA_HEIGHT / 2.0)
+        self.piston_marker.setX(self.simulation.piston.position)
 
     def destroy(self) -> None:
         """Remove this scene before the Panda3D app switches dimensions."""
         self.app.taskMgr.remove("energy-well-demo-update")
-        for key in ("1", "2", "r", "space"):
+        for key in ("1", "2", "p", "r", "space"):
             self.app.ignore(key)
         self.instructions.destroy()
         self.status.destroy()
@@ -170,6 +185,15 @@ class EnergyWellScene:
 
     def _reset_current_mode(self) -> None:
         self._reset_simulation(self.mode)
+
+    def _toggle_piston(self) -> None:
+        target = self.simulation.piston.target_level
+        next_target = 0.0 if target > 0.0 else self.PISTON_COMPRESSED_LEVEL
+        self.simulation.set_piston_target_level(
+            next_target, speed=self.PISTON_SPEED
+        )
+        direction = "outward" if next_target == 0.0 else "inward"
+        self.last_event = f"Piston moving {direction}"
 
     def _update(self, task: Task) -> int:
         if not self.paused:
@@ -188,14 +212,19 @@ class EnergyWellScene:
                         self.last_event = "Exited well: relative speed decreased"
                 elif event.kind == "particle":
                     self.last_event = "Hard-sphere collision"
+                elif event.kind == "piston":
+                    self.last_event = "Particle collided with the moving piston"
             self._sync_particle_nodes()
+
+        piston = self.simulation.piston
+        self.piston_marker.setX(piston.position)
 
         first, second = self.simulation.particles
         separation = abs(first.position[0] - second.position[0])
         state = "INSIDE WELL" if separation <= self.WELL_RADIUS else "OUTSIDE WELL"
         pause_label = "PAUSED" if self.paused else "RUNNING"
         self.status.setText(
-            f"{self.mode_label}  |  {pause_label}  |  {state}  |  "
+            f"{self.mode_label}  |  {pause_label}  |  PISTON X={piston.position:.1f}  |  {state}  |  "
             f"v=({first.velocity[0]:+.2f}, {second.velocity[0]:+.2f})  |  "
             f"t={self.simulation.current_time:.2f} s\n{self.last_event}"
         )

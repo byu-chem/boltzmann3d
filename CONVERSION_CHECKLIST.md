@@ -31,6 +31,7 @@ This checklist tracks feature parity between the Java application and the Python
 
 ## Simulation setup and desktop application
 
+- [x] Expose the movable piston in the Panda3D prototype with a visible marker and P-key control in 1D/2D/3D.
 - [ ] Generate configurable initial particle positions and velocities for realistic multi-particle simulations.
 - [ ] Add a Python simulation-settings model for particle types/counts, arena dimensions and mode, wells, reactions, piston, and thermostat options.
 - [ ] Decide whether Python must load and save Java `.set` files; implement that compatibility if it remains a requirement.
