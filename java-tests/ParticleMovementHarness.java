@@ -8,6 +8,7 @@ import edu.byu.chem.boltzmann.model.physics.Thermostat;
 import edu.byu.chem.boltzmann.model.physics.Wall;
 import edu.byu.chem.boltzmann.utils.Units;
 import edu.byu.chem.boltzmann.utils.data.ParticleType;
+import edu.byu.chem.boltzmann.utils.data.ReactionRelationship;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfoSupplier;
 import edu.byu.chem.boltzmann.model.statistics.interfaces.StatisticID;
@@ -46,6 +47,7 @@ public final class ParticleMovementHarness {
         testThreeDimensionalEnergyWell();
         testTwoDimensionalAttractiveWallWell();
         testTwoDimensionalWallHeatReservoir();
+        testOneDimensionalReaction();
         testTwoDimensionalParticleCollision();
         testThreeDimensionalParticleCollision();
         testPeriodicParticleCollisionAcrossBoundary();
@@ -466,6 +468,103 @@ public final class ParticleMovementHarness {
         System.out.printf(Locale.ROOT,
                 "Wall heat reservoir PASS: targetKE=%.15g post-collision vy=%.15g%n",
                 targetEnergy, particle.getYVel());
+    }
+
+    private static void testOneDimensionalReaction() {
+        ParticleType red = new ParticleType(1.0, 0.5, Color.RED, "reactant");
+        ParticleType blue = new ParticleType(1.0, 0.5, Color.BLUE, "product");
+        double forwardActivationEnergy = 1.0e-6;
+        double reverseActivationEnergy = 0.25e-6;
+        SimulationInfo reactionInfo = createReactionSimulationInfo(
+                red, blue, forwardActivationEnergy, reverseActivationEnergy, false);
+        Particle1D first = new Particle1D(
+                new double[]{2.0}, new double[]{3.0}, 0.0, red, reactionInfo);
+        Particle1D second = new Particle1D(
+                new double[]{8.0}, new double[]{-1.0}, 0.0, red, reactionInfo);
+        EventInfo collision = new EventInfo(Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+        first.predCol(second, null, collision);
+        assertClose("reaction collision time", collision.colTime, 1.25);
+        first.collideWith(second, collision);
+
+        if (!first.getDisplayColor().equals(Color.BLUE)
+                || !second.getDisplayColor().equals(Color.BLUE)) {
+            throw new AssertionError("forward reaction did not convert both particles to blue");
+        }
+        double deltaEnergy = Units.convert(
+                Units.Energy.KILOJOULE_PER_MOLE,
+                Units.Energy.AMU_JOULE,
+                forwardActivationEnergy - reverseActivationEnergy);
+        double postRelativeSpeed = Math.sqrt(16.0 - 2.0 * deltaEnergy / 0.5);
+        assertClose("reaction first velocity", first.getXVel(), (2.0 - postRelativeSpeed) / 2.0);
+        assertClose("reaction second velocity", second.getXVel(), (2.0 + postRelativeSpeed) / 2.0);
+        System.out.printf(Locale.ROOT,
+                "1D reaction PASS: products=blue/blue velocities=(%.15g, %.15g)%n",
+                first.getXVel(), second.getXVel());
+    }
+
+    private static SimulationInfo createReactionSimulationInfo(
+            final ParticleType reactant,
+            final ParticleType product,
+            final double forwardActivationEnergy,
+            final double reverseActivationEnergy,
+            final boolean suppressReverse) {
+        SimulationInfoSupplier supplier = (SimulationInfoSupplier) Proxy.newProxyInstance(
+                SimulationInfoSupplier.class.getClassLoader(),
+                new Class<?>[]{SimulationInfoSupplier.class},
+                (proxy, method, args) -> {
+                    String name = method.getName();
+                    if ("getArenaType".equals(name)) {
+                        return SimulationInfo.ArenaType.REFLECTING_BOUNDARIES;
+                    }
+                    if ("getDimension".equals(name)) {
+                        return 1;
+                    }
+                    if ("getArenaXSize".equals(name)) {
+                        return 20.0;
+                    }
+                    if ("getNumberOfParticleTypes".equals(name)) {
+                        return 2;
+                    }
+                    if ("getParticleType".equals(name)) {
+                        return ((Integer) args[0]) == 0 ? reactant : product;
+                    }
+                    if ("getNumberOfParticles".equals(name)) {
+                        return 1;
+                    }
+                    if ("getParticlePosition".equals(name)) {
+                        return new double[]{((Integer) args[0]) == 0 ? 2.0 : 8.0, 0.0, 0.0};
+                    }
+                    if ("getParticleVelocity".equals(name)) {
+                        return new double[]{((Integer) args[0]) == 0 ? 3.0 : -1.0, 0.0, 0.0};
+                    }
+                    if ("isReactionModeSelected".equals(name)) {
+                        return true;
+                    }
+                    if ("getNumberOfReactionRelationships".equals(name)) {
+                        return 1;
+                    }
+                    if ("getReactionRelationship".equals(name)) {
+                        return new ReactionRelationship(
+                                reactant, product, forwardActivationEnergy,
+                                reverseActivationEnergy, false, suppressReverse);
+                    }
+                    if ("getRecordedStatistics".equals(name)) {
+                        return new StatisticID[0];
+                    }
+
+                    Class<?> returnType = method.getReturnType();
+                    if (returnType == boolean.class) {
+                        return false;
+                    }
+                    if (returnType == int.class) {
+                        return 0;
+                    }
+                    if (returnType == double.class) {
+                        return 0.0;
+                    }
+                    return null;
+                });
+        return new SimulationInfo(supplier);
     }
 
     private static void printTwoDimensionalWellState(

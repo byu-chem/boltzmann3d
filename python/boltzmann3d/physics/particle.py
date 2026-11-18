@@ -4,6 +4,8 @@ from dataclasses import dataclass
 import math
 import sys
 
+from .reaction import ReactionRule
+
 
 NO_COLLISION_TIME = sys.float_info.max
 _KILOJOULE_PER_MOLE_TO_AMU_M2_PER_S2 = (
@@ -29,6 +31,7 @@ class Particle:
     mass: float = 1.0
     radius: float = 1.0
     energy_well_depth: float = 0.0
+    species: str = "red"
 
     def __post_init__(self) -> None:
         self.position = tuple(float(component) for component in self.position)
@@ -38,6 +41,7 @@ class Particle:
         self.mass = float(self.mass)
         self.radius = float(self.radius)
         self.energy_well_depth = float(self.energy_well_depth)
+        self.species = str(self.species)
 
         if not self.position:
             raise ValueError("A particle must have at least one position component")
@@ -49,6 +53,8 @@ class Particle:
             raise ValueError("Particle radius cannot be negative")
         if not math.isfinite(self.energy_well_depth) or self.energy_well_depth < 0.0:
             raise ValueError("Particle energy-well depth must be finite and nonnegative")
+        if not self.species:
+            raise ValueError("Particle species must be nonempty")
 
     def move_to_time(self, target_time: float) -> None:
         """Advance the particle along its current velocity to ``target_time``."""
@@ -67,7 +73,8 @@ class Particle:
         other: "Particle",
         collision_time: float,
         image_offset: tuple[float, ...] | None = None,
-    ) -> None:
+        reaction_rule: ReactionRule | None = None,
+    ) -> str | None:
         """Resolve an ordinary elastic hard-sphere collision in 1D, 2D, or 3D.
 
         The caller predicts the event time. Both particles are advanced to
@@ -75,7 +82,8 @@ class Particle:
         center collision direction change, matching Java's ordinary
         ``Particle2D/3D.collideWith`` behavior. For periodic collisions,
         ``image_offset`` shifts the second particle to its colliding image.
-        Attractive wells and reactions are outside this method.
+        Supplying ``reaction_rule`` enables Java-style species conversion at
+        ordinary collisions that clear its activation threshold.
         """
         dimension = len(self.position)
         if dimension not in (1, 2, 3) or len(other.position) != dimension:
@@ -102,25 +110,109 @@ class Particle:
         distance = math.sqrt(distance_squared)
         normal = tuple(component / distance for component in normal)
 
-        relative_normal_speed = sum(
-            (other_speed - self_speed) * component
-            for self_speed, other_speed, component in zip(
-                self.velocity, other.velocity, normal
-            )
-        )
-        inverse_mass_sum = (1.0 / self.mass) + (1.0 / other.mass)
-        impulse = -2.0 * relative_normal_speed / inverse_mass_sum
-
-        self.velocity = tuple(
-            speed - (impulse / self.mass) * component
+        first_normal_speed = sum(
+            speed * component
             for speed, component in zip(self.velocity, normal)
         )
-        other.velocity = tuple(
-            speed + (impulse / other.mass) * component
+        other_normal_speed = sum(
+            speed * component
             for speed, component in zip(other.velocity, normal)
         )
+        relative_normal_speed = other_normal_speed - first_normal_speed
+
+        reaction_direction: str | None = None
+        reaction_energy_change = 0.0
+        if reaction_rule is not None:
+            reduced_mass = self.mass * other.mass / (self.mass + other.mass)
+            relative_energy = (
+                0.5
+                * reduced_mass
+                * (first_normal_speed - other_normal_speed) ** 2
+            )
+            relative_energy_kj_per_mole = (
+                relative_energy
+                / _KILOJOULE_PER_MOLE_TO_AMU_M2_PER_S2
+            )
+            if (
+                self.species == reaction_rule.reactant_species
+                and other.species == reaction_rule.reactant_species
+                and relative_energy_kj_per_mole
+                > reaction_rule.forward_activation_energy
+            ):
+                reaction_direction = "forward"
+                reaction_energy_change = (
+                    reaction_rule.forward_activation_energy
+                    - reaction_rule.reverse_activation_energy
+                ) * _KILOJOULE_PER_MOLE_TO_AMU_M2_PER_S2
+                self.species = reaction_rule.product_species
+                other.species = reaction_rule.product_species
+            elif (
+                self.species == reaction_rule.product_species
+                and other.species == reaction_rule.product_species
+                and relative_energy_kj_per_mole
+                > reaction_rule.reverse_activation_energy
+                and not reaction_rule.suppress_reverse
+            ):
+                reaction_direction = "reverse"
+                reaction_energy_change = (
+                    reaction_rule.reverse_activation_energy
+                    - reaction_rule.forward_activation_energy
+                ) * _KILOJOULE_PER_MOLE_TO_AMU_M2_PER_S2
+                self.species = reaction_rule.reactant_species
+                other.species = reaction_rule.reactant_species
+
+        if reaction_direction is not None and reaction_energy_change != 0.0:
+            combined_mass = self.mass + other.mass
+            momentum = (
+                self.mass * first_normal_speed
+                + other.mass * other_normal_speed
+            )
+            relative_speed = first_normal_speed - other_normal_speed
+            squared_post_reaction_speed = (
+                relative_speed * relative_speed
+                - 2.0 * reaction_energy_change / reduced_mass
+            )
+            if squared_post_reaction_speed < 0.0:
+                raise ValueError("Reaction energy exceeds the available collision energy")
+            post_reaction_speed = math.sqrt(squared_post_reaction_speed)
+            new_first_normal_speed = (
+                momentum - other.mass * post_reaction_speed
+            ) / combined_mass
+            new_other_normal_speed = (
+                momentum + self.mass * post_reaction_speed
+            ) / combined_mass
+            self.velocity = tuple(
+                speed + (new_first_normal_speed - first_speed) * component
+                for speed, first_speed, component in zip(
+                    self.velocity,
+                    (first_normal_speed,) * dimension,
+                    normal,
+                )
+            )
+            other.velocity = tuple(
+                speed + (new_other_normal_speed - other_speed) * component
+                for speed, other_speed, component in zip(
+                    other.velocity,
+                    (other_normal_speed,) * dimension,
+                    normal,
+                )
+            )
+        else:
+            inverse_mass_sum = (1.0 / self.mass) + (1.0 / other.mass)
+            impulse = -2.0 * relative_normal_speed / inverse_mass_sum
+
+            self.velocity = tuple(
+                speed - (impulse / self.mass) * component
+                for speed, component in zip(self.velocity, normal)
+            )
+            other.velocity = tuple(
+                speed + (impulse / other.mass) * component
+                for speed, component in zip(other.velocity, normal)
+            )
+
         self.time_since_collision = 0.0
         other.time_since_collision = 0.0
+        return reaction_direction
 
     def collide_1d(self, other: "Particle", collision_time: float) -> None:
         """Compatibility wrapper for resolving a 1D elastic collision."""

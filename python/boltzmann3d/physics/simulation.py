@@ -6,6 +6,7 @@ import math
 from typing import Literal
 
 from .particle import NO_COLLISION_TIME, Particle
+from .reaction import ReactionRule
 
 
 BoundaryMode = Literal["reflecting", "periodic", "divided"]
@@ -55,8 +56,12 @@ class Simulation:
         wall_well_width: float | None = None,
         wall_well_depth: float | None = None,
         heat_reservoir_temperature: float | None = None,
+        reaction_rule: ReactionRule | None = None,
     ):
         self.particles = list(particles)
+        if reaction_rule is not None and not isinstance(reaction_rule, ReactionRule):
+            raise ValueError("reaction_rule must be a ReactionRule")
+        self.reaction_rule = reaction_rule
         if boundary_mode not in ("reflecting", "periodic", "divided"):
             raise ValueError("Boundary mode must be 'reflecting', 'periodic', or 'divided'")
         self.boundary_mode = boundary_mode
@@ -630,7 +635,10 @@ class Simulation:
         if event.kind == "particle":
             first_index, second_index = event.particle_indices
             self.particles[first_index].collide(
-                self.particles[second_index], event.time, event.image_offset
+                self.particles[second_index],
+                event.time,
+                event.image_offset,
+                reaction_rule=self.reaction_rule,
             )
         elif event.kind in ("well_entry", "well_exit"):
             first_index, second_index = event.particle_indices

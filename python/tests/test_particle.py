@@ -1,9 +1,62 @@
+import math
 import unittest
 
-from boltzmann3d.physics import NO_COLLISION_TIME, Particle
+from boltzmann3d.physics import NO_COLLISION_TIME, Particle, ReactionRule
 
 
 class ParticleMovementTests(unittest.TestCase):
+    def test_reaction_collision_changes_species_and_relative_speed(self) -> None:
+        first = Particle(position=(2.0,), velocity=(3.0,), species="red")
+        second = Particle(position=(8.0,), velocity=(-1.0,), species="red")
+        reaction = ReactionRule(
+            forward_activation_energy=1.0e-6,
+            reverse_activation_energy=0.25e-6,
+        )
+
+        direction = first.collide(
+            second,
+            collision_time=1.0,
+            reaction_rule=reaction,
+        )
+
+        self.assertEqual(direction, "forward")
+        self.assertEqual((first.species, second.species), ("blue", "blue"))
+        conversion = 1_000.0 / 6.02214179e23 / 1.660538782e-27
+        relative_speed = math.sqrt(
+            16.0 - 2.0 * (1.0e-6 - 0.25e-6) * conversion / 0.5
+        )
+        self.assertAlmostEqual(first.velocity[0], (2.0 - relative_speed) / 2.0)
+        self.assertAlmostEqual(second.velocity[0], (2.0 + relative_speed) / 2.0)
+
+    def test_reaction_below_threshold_is_an_ordinary_collision(self) -> None:
+        first = Particle(position=(2.0,), velocity=(3.0,), species="red")
+        second = Particle(position=(8.0,), velocity=(-1.0,), species="red")
+        reaction = ReactionRule(
+            forward_activation_energy=1.0e-5,
+            reverse_activation_energy=0.5e-5,
+        )
+
+        direction = first.collide(second, collision_time=1.0, reaction_rule=reaction)
+
+        self.assertIsNone(direction)
+        self.assertEqual((first.species, second.species), ("red", "red"))
+        self.assertEqual((first.velocity, second.velocity), ((-1.0,), (3.0,)))
+
+    def test_reverse_reaction_can_be_suppressed(self) -> None:
+        first = Particle(position=(2.0,), velocity=(3.0,), species="blue")
+        second = Particle(position=(8.0,), velocity=(-1.0,), species="blue")
+        reaction = ReactionRule(
+            forward_activation_energy=1.0e-6,
+            reverse_activation_energy=0.25e-6,
+            suppress_reverse=True,
+        )
+
+        direction = first.collide(second, collision_time=1.0, reaction_rule=reaction)
+
+        self.assertIsNone(direction)
+        self.assertEqual((first.species, second.species), ("blue", "blue"))
+        self.assertEqual((first.velocity, second.velocity), ((-1.0,), (3.0,)))
+
     def test_moves_in_one_dimension(self) -> None:
         particle = Particle(position=(2.0,), velocity=(3.0,))
 

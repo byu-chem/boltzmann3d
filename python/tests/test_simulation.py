@@ -1,10 +1,24 @@
 import math
 import unittest
 
-from boltzmann3d.physics import Particle, Simulation
+from boltzmann3d.physics import Particle, ReactionRule, Simulation
 
 
 class SimulationEventLoopTests(unittest.TestCase):
+    def test_simulation_applies_reaction_rule_at_particle_collision(self) -> None:
+        first = Particle(position=(2.0,), velocity=(3.0,), radius=0.5)
+        second = Particle(position=(8.0,), velocity=(-1.0,), radius=0.5)
+        simulation = Simulation(
+            [first, second],
+            (30.0,),
+            reaction_rule=ReactionRule(1.0e-6, 0.25e-6),
+        )
+
+        events = simulation.advance_to(1.25)
+
+        self.assertEqual([(event.kind, event.time) for event in events], [("particle", 1.25)])
+        self.assertEqual((first.species, second.species), ("blue", "blue"))
+
     def test_attractive_wall_well_entry_matches_java_velocity_change(self) -> None:
         particle = Particle(
             position=(4.0, 8.0), velocity=(1.5, -2.0), mass=2.0, radius=0.5

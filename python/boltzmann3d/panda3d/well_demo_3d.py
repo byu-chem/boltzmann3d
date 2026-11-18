@@ -17,7 +17,7 @@ from panda3d.core import (
     WindowProperties,
 )
 
-from ..physics import Particle, Simulation
+from ..physics import Particle, ReactionRule, Simulation
 
 
 class EnergyWell3DScene:
@@ -30,6 +30,7 @@ class EnergyWell3DScene:
     WELL_DEPTH = 0.0001  # kJ/mol, sized for the demo's displayed velocities.
     WALL_WELL_WIDTH = 6.0
     RESERVOIR_TEMPERATURE = 315.0
+    REACTION_RULE = ReactionRule(0.0001, 0.00005)
     SIMULATION_SPEED = 1.0
 
     def __init__(self, app: ShowBase) -> None:
@@ -50,6 +51,8 @@ class EnergyWell3DScene:
 
         app.accept("1", self._reset_simulation, ["pass"])
         app.accept("2", self._reset_simulation, ["trap"])
+        app.accept("3", self._reset_simulation, ["forward_reaction"])
+        app.accept("4", self._reset_simulation, ["reverse_reaction"])
         app.accept("r", self._reset_current_mode)
         app.accept("space", self._toggle_pause)
         app.accept("w", self._toggle_wall_well)
@@ -116,7 +119,7 @@ class EnergyWell3DScene:
 
     def _add_instructions(self) -> None:
         self.instructions = OnscreenText(
-            text="1: pass and exit     2: trapped pair     W: wall well     H: heat reservoir     SPACE: pause     R: reset",
+            text="1: pass     2: trapped     3: red → blue     4: blue → red     W: wall well     H: reservoir     SPACE: pause     R: reset",
             pos=(-1.28, 0.92),
             scale=0.045,
             align=TextNode.ALeft,
@@ -144,13 +147,26 @@ class EnergyWell3DScene:
             velocities = ((20.0, 4.0, 6.0), (-20.0, -4.0, -6.0))
             self.last_event = "Approaching the interaction well in 3D"
             self.mode_label = "PASS AND EXIT"
-        else:
+            species = ("red", "red")
+        elif mode == "trap":
             # The pair begins inside the well and moves outward below the
             # escape-energy threshold.
             positions = ((30.0, 18.0, 18.0), (32.0, 19.0, 19.0))
             velocities = ((-5.0, -2.5, -2.5), (5.0, 2.5, 2.5))
             self.last_event = "Pair starts inside the well with too little escape energy"
             self.mode_label = "TRAPPED PAIR"
+            species = ("red", "red")
+        else:
+            positions = ((20.0, 20.0, 20.0), (44.0, 20.0, 20.0))
+            velocities = ((16.0, 0.0, 0.0), (-16.0, 0.0, 0.0))
+            if mode == "forward_reaction":
+                species = ("red", "red")
+                self.last_event = "Red reactants approach: a collision can make blue products"
+                self.mode_label = "FORWARD REACTION"
+            else:
+                species = ("blue", "blue")
+                self.last_event = "Blue products approach: a collision can make red reactants"
+                self.mode_label = "REVERSE REACTION"
 
         particles = [
             Particle(
@@ -158,9 +174,12 @@ class EnergyWell3DScene:
                 velocity=velocity,
                 mass=1.0,
                 radius=self.PARTICLE_RADIUS,
-                energy_well_depth=self.WELL_DEPTH,
+                energy_well_depth=(
+                    self.WELL_DEPTH if mode in ("pass", "trap") else 0.0
+                ),
+                species=particle_species,
             )
-            for position, velocity in zip(positions, velocities)
+            for position, velocity, particle_species in zip(positions, velocities, species)
         ]
         self.simulation = Simulation(
             particles,
@@ -170,6 +189,9 @@ class EnergyWell3DScene:
             wall_well_depth=(self.WELL_DEPTH if self.wall_well_enabled else None),
             heat_reservoir_temperature=(
                 self.RESERVOIR_TEMPERATURE if self.heat_reservoir_enabled else None
+            ),
+            reaction_rule=(
+                self.REACTION_RULE if mode in ("forward_reaction", "reverse_reaction") else None
             ),
         )
         if self.wall_well_enabled:
@@ -182,11 +204,16 @@ class EnergyWell3DScene:
     def _sync_particle_nodes(self) -> None:
         for particle, node in zip(self.simulation.particles, self.particle_nodes):
             node.setPos(*particle.position)
+            node.setColor(
+                (0.96, 0.18, 0.22, 1.0)
+                if particle.species == "red"
+                else (0.2, 0.62, 1.0, 1.0)
+            )
 
     def destroy(self) -> None:
         """Remove this scene before the Panda3D app switches dimensions."""
         self.app.taskMgr.remove("energy-well-3d-update")
-        for key in ("1", "2", "r", "space", "w", "h"):
+        for key in ("1", "2", "3", "4", "r", "space", "w", "h"):
             self.app.ignore(key)
         self.instructions.destroy()
         self.status.destroy()
@@ -227,7 +254,12 @@ class EnergyWell3DScene:
                     else:
                         self.last_event = "Exited well: radial relative speed decreased"
                 elif event.kind == "particle":
-                    self.last_event = "Hard-sphere collision"
+                    if self.mode == "forward_reaction":
+                        self.last_event = "Forward reaction: red reactants became blue products"
+                    elif self.mode == "reverse_reaction":
+                        self.last_event = "Reverse reaction: blue products became red reactants"
+                    else:
+                        self.last_event = "Hard-sphere collision"
                 elif event.kind == "wall":
                     self.last_event = "Particle reflected from the arena wall"
                 elif event.kind == "wall_well_entry":
