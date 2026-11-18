@@ -7,6 +7,8 @@ Compare with the finite-system output from ``ParticleMovementHarness``.
 """
 
 from boltzmann3d.physics import (
+    Particle,
+    Simulation,
     average_speed_meters_per_second,
     average_kinetic_energy_joules,
     finite_system_corrected_average_speed_meters_per_second,
@@ -24,6 +26,7 @@ from boltzmann3d.physics import (
     predict_collision_rate_for_type,
     predict_average_collision_rate,
     predict_pressure,
+    calculate_simulation_statistics,
 )
 
 
@@ -272,6 +275,109 @@ def main() -> None:
                 f"Pressure prediction {label} corrected={bool(apply_correction)}: "
                 f"{actual:.15g}"
             )
+    simulation_statistics_cases = {
+        "1D reflecting": (
+            (70e-9,), "reflecting", 0.0, None, 841.905487008152,
+            (57301173375.8868, 50467896668.6721), 54567862693.0009,
+            9.37400925322581e-13,
+        ),
+        "1D periodic": (
+            (70e-9,), "periodic", 0.0, None, 841.905487008152,
+            (55906005904.0038, 49511539210.5595), 53348219226.6261,
+            9.15974618458065e-13,
+        ),
+        "2D reflecting": (
+            (70e-9, 50e-9), "reflecting", 0.0, None, 420.952743504076,
+            (2285938332.91838, 2827325564.30993), 2502493225.47500,
+            8.82754085412083e-6,
+        ),
+        "2D periodic": (
+            (70e-9, 50e-9), "periodic", 0.0, None, 420.952743504076,
+            (2138505639.00870, 2695895210.91919), 2361461467.77289,
+            8.35573341129598e-6,
+        ),
+        "3D reflecting": (
+            (70e-9, 50e-9, 40e-9), "reflecting", 0.0, None, 280.635162336051,
+            (143585007.675659, 235209603.933665), 180234846.178861,
+            152.653899226430,
+        ),
+        "3D divided": (
+            (70e-9, 50e-9, 40e-9), "divided", 1.0e-9, None, 280.635162336051,
+            (305817883.424622, 496593522.123534), 382128138.904186,
+            322.651706783365,
+        ),
+        "3D divided with hole": (
+            (70e-9, 50e-9, 40e-9), "divided", 1.0e-9, 10e-9, 280.635162336051,
+            (143585007.675659, 235209603.933665), 180234846.178861,
+            152.653899226430,
+        ),
+    }
+    for label, case in simulation_statistics_cases.items():
+        arena_sizes, boundary_mode, divider_half_width, hole_diameter = case[:4]
+        expected_temperature, expected_type_rates, expected_average_rate, expected_pressure = case[4:]
+        dimension = len(arena_sizes)
+        x_positions = (5e-9, 15e-9, 25e-9, 45e-9, 55e-9)
+        particles = []
+        for particle_index, x_position in enumerate(x_positions):
+            species = "red" if particle_index < 3 else "blue"
+            mass_amu = 20.0 if species == "red" else 40.0
+            radius = 0.5e-9 if species == "red" else 1.25e-9
+            position = [x_position]
+            velocity = [500.0]
+            if dimension > 1:
+                position.append(arena_sizes[1] / 2.0)
+                velocity.append(0.0)
+            if dimension > 2:
+                position.append(arena_sizes[2] / 2.0)
+                velocity.append(0.0)
+            particles.append(
+                Particle(
+                    tuple(position),
+                    tuple(velocity),
+                    mass=mass_amu,
+                    radius=radius,
+                    species=species,
+                )
+            )
+        simulation = Simulation(
+            particles,
+            arena_sizes,
+            boundary_mode=boundary_mode,
+            divider_half_width=divider_half_width,
+            hole_diameter=hole_diameter,
+        )
+        statistics = calculate_simulation_statistics(
+            simulation,
+            real_gas_corrections=True,
+        )
+        values = (
+            statistics.temperature_kelvin,
+            statistics.particle_types[0].predicted_collision_rate_per_particle,
+            statistics.particle_types[1].predicted_collision_rate_per_particle,
+            statistics.average_collision_rate_per_particle,
+            statistics.predicted_pressure,
+        )
+        expected_values = (
+            expected_temperature,
+            *expected_type_rates,
+            expected_average_rate,
+            expected_pressure,
+        )
+        for name, actual, expected in zip(
+            ("temperature", "red rate", "blue rate", "average rate", "pressure"),
+            values,
+            expected_values,
+        ):
+            if abs(actual - expected) > abs(expected) * 1e-12:
+                raise AssertionError(
+                    f"Simulation statistics {label} {name} differs from Java: "
+                    f"expected {expected}, got {actual}"
+                )
+        print(
+            f"Simulation statistics {label}: T={statistics.temperature_kelvin:.15g} K "
+            f"average collision rate={statistics.average_collision_rate_per_particle:.15g} s^-1 "
+            f"pressure={statistics.predicted_pressure:.15g}"
+        )
     for dimension, expected in java_real_gas_b2_outputs.items():
         actual = real_gas_b2(0.5e-9, 1.25e-9, dimension)
         if abs(actual - expected) > abs(expected) * 1e-12:
@@ -447,6 +553,7 @@ def main() -> None:
     print("Real-gas X comparison PASS for multi-type arena cases")
     print("Collision-rate prediction comparison PASS with real-gas option")
     print("Pressure prediction comparison PASS with real-gas option")
+    print("Simulation-level statistics comparison PASS with real-gas corrections")
 
 
 if __name__ == "__main__":

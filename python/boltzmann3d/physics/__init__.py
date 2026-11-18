@@ -4,6 +4,11 @@ from .particle import NO_COLLISION_TIME, Particle
 from .piston import Piston, PistonMode
 from .reaction import ReactionRule
 from .simulation import Simulation, SimulationEvent
+from .statistics import (
+    ParticleTypeStatistics,
+    SimulationStatistics,
+    calculate_simulation_statistics,
+)
 from .thermodynamics import (
     BOLTZMANN_CONSTANT_JOULES_PER_KELVIN,
     average_speed_meters_per_second,
@@ -34,6 +39,9 @@ __all__ = [
     "ReactionRule",
     "Simulation",
     "SimulationEvent",
+    "ParticleTypeStatistics",
+    "SimulationStatistics",
+    "calculate_simulation_statistics",
     "BOLTZMANN_CONSTANT_JOULES_PER_KELVIN",
     "average_speed_meters_per_second",
     "average_kinetic_energy_joules",

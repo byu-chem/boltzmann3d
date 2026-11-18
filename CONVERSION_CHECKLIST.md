@@ -57,7 +57,8 @@ This checklist tracks feature parity between the Java application and the Python
 ## Statistics, plots, and delivery
 
 - [ ] Port Java statistics used by the application, such as temperature, pressure, speed distributions, and radial-distribution data where enabled.
-- [ ] Connect the ported collision-rate and pressure prediction functions to the Python statistics/readout layer.
+- [x] Connect temperature, collision-rate, and pressure predictions to a simulation-level Python statistics API.
+- [ ] Connect simulation statistics to desktop readouts.
 - [ ] Recreate the Java plots and readouts in the Python desktop interface.
 - [ ] Port supported project presets and save/load behavior.
 - [ ] Document installation, launch, settings, and controls for Python users.
