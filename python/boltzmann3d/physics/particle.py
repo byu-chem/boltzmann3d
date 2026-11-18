@@ -530,6 +530,60 @@ class Particle:
                 new_kinetic_energy_joules - old_kinetic_energy_joules
             )
 
+    def collide_with_piston(
+        self,
+        collision_time: float,
+        axis: int,
+        piston_position: float,
+        piston_velocity: float,
+        *,
+        thermostat: WallThermostat | None = None,
+    ) -> None:
+        """Reflect from a moving plane using Java's piston collision equation."""
+        if not isinstance(axis, int) or axis < 0 or axis >= len(self.position):
+            raise ValueError("Piston axis must identify a particle coordinate")
+        piston_position = float(piston_position)
+        piston_velocity = float(piston_velocity)
+        if not math.isfinite(piston_position) or not math.isfinite(piston_velocity):
+            raise ValueError("Piston position and velocity must be finite")
+        if thermostat is not None and not isinstance(thermostat, WallThermostat):
+            raise ValueError("thermostat must be a WallThermostat")
+
+        incoming_speed = self.velocity[axis]
+        if incoming_speed <= piston_velocity:
+            raise ValueError("Particle is not approaching the piston")
+        self.move_to_time(collision_time)
+        old_kinetic_energy_joules = (
+            0.5
+            * self.mass
+            * sum(component * component for component in self.velocity)
+            * _ATOMIC_MASS_UNIT_KILOGRAMS
+        )
+        position = list(self.position)
+        velocity = list(self.velocity)
+        position[axis] = piston_position - self.radius
+        if piston_velocity != 0.0:
+            velocity[axis] = 2.0 * piston_velocity - incoming_speed
+        else:
+            multiplier = (
+                1.0
+                if thermostat is None
+                else thermostat.velocity_multiplier(self.mass, incoming_speed)
+            )
+            velocity[axis] = -incoming_speed * multiplier
+        self.position = tuple(position)
+        self.velocity = tuple(velocity)
+        if thermostat is not None:
+            new_kinetic_energy_joules = (
+                0.5
+                * self.mass
+                * sum(component * component for component in self.velocity)
+                * _ATOMIC_MASS_UNIT_KILOGRAMS
+            )
+            thermostat.record_energy_change(
+                new_kinetic_energy_joules - old_kinetic_energy_joules
+            )
+
     def _validate_divider(
         self, arena_sizes: tuple[float, ...], divider_half_width: float
     ) -> tuple[tuple[float, ...], float, float]:

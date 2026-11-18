@@ -6,13 +6,14 @@ import math
 from typing import Literal
 
 from .particle import NO_COLLISION_TIME, Particle
+from .piston import Piston
 from .reaction import ReactionRule
 from .thermostat import WallThermostat
 
 
 BoundaryMode = Literal["reflecting", "periodic", "divided"]
 EventKind = Literal[
-    "particle", "wall", "wrap", "divider", "edge", "well_entry", "well_exit",
+    "particle", "wall", "piston", "wrap", "divider", "edge", "well_entry", "well_exit",
     "wall_well_entry", "wall_well_exit",
 ]
 
@@ -59,6 +60,7 @@ class Simulation:
         heat_reservoir_temperature: float | None = None,
         reaction_rule: ReactionRule | None = None,
         thermostat: WallThermostat | None = None,
+        piston: Piston | None = None,
     ):
         self.particles = list(particles)
         if reaction_rule is not None and not isinstance(reaction_rule, ReactionRule):
@@ -67,6 +69,9 @@ class Simulation:
         if thermostat is not None and not isinstance(thermostat, WallThermostat):
             raise ValueError("thermostat must be a WallThermostat")
         self.thermostat = thermostat
+        if piston is not None and not isinstance(piston, Piston):
+            raise ValueError("piston must be a Piston")
+        self.piston = piston
         if boundary_mode not in ("reflecting", "periodic", "divided"):
             raise ValueError("Boundary mode must be 'reflecting', 'periodic', or 'divided'")
         self.boundary_mode = boundary_mode
@@ -140,8 +145,11 @@ class Simulation:
                 raise ValueError("Arena must have one, two, or three positive dimensions")
             if self.wall_well_width is not None and len(self.arena_sizes) not in (2, 3):
                 raise ValueError("Attractive wall wells require a 2D or 3D simulation")
+            self.current_time = max(0.0, self.piston.time if self.piston else 0.0)
+            if self.piston is not None and self.piston.time < self.current_time:
+                self.piston.move_to_time(self.current_time)
+            self._validate_piston(len(self.arena_sizes))
             self._validate_hole_size(len(self.arena_sizes))
-            self.current_time = 0.0
             return
 
         dimension = len(self.particles[0].position)
@@ -157,11 +165,16 @@ class Simulation:
         self.arena_sizes = tuple(float(size) for size in arena_sizes)
         if any(size <= 0.0 for size in self.arena_sizes):
             raise ValueError("Arena dimensions must be positive")
-        self._validate_hole_size(dimension)
         self.current_time = max(particle.time for particle in self.particles)
+        if self.piston is not None:
+            self.current_time = max(self.current_time, self.piston.time)
+            if self.piston.time < self.current_time:
+                self.piston.move_to_time(self.current_time)
         for particle in self.particles:
             if particle.time < self.current_time:
                 particle.move_to_time(self.current_time)
+        self._validate_piston(dimension)
+        self._validate_hole_size(dimension)
         if self.boundary_mode == "reflecting":
             for particle in self.particles:
                 particle._validate_wall_arena(self.arena_sizes)
@@ -184,6 +197,28 @@ class Simulation:
                 else:
                     self._validate_hole_particle(particle)
         self._initialize_interaction_well_states()
+
+    def _validate_piston(self, dimension: int) -> None:
+        if self.piston is None:
+            return
+        if self.boundary_mode != "reflecting":
+            raise ValueError("A movable piston requires reflecting arena boundaries")
+        if self.hole_diameter is not None:
+            raise ValueError("A movable piston cannot be combined with a divider hole")
+        axis = 0 if dimension == 1 else 1
+        if not 1 <= dimension <= 3:
+            raise ValueError("A movable piston requires a 1D, 2D, or 3D simulation")
+        if not math.isclose(
+            self.piston.arena_length, self.arena_sizes[axis], rel_tol=0.0, abs_tol=1e-12
+        ):
+            raise ValueError("Piston arena length must match the size along its axis")
+        if self.particles:
+            for particle in self.particles:
+                if (
+                    particle.position[axis] + particle.radius
+                    > self.piston.position + 1e-12
+                ):
+                    raise ValueError("Particle overlaps or starts beyond the piston")
 
     def _initialize_interaction_well_states(self) -> None:
         if self.interaction_radius_multiplier is None:
@@ -290,6 +325,16 @@ class Simulation:
                         "Cannot close the hole while a particle overlaps the divider"
                     )
         self.hole_open = is_open
+
+    def set_piston_target_level(
+        self, target_level: float, *, speed: float | None = None
+    ) -> None:
+        """Start moving the configured piston toward a new level."""
+        if self.piston is None:
+            raise ValueError("This simulation has no movable piston")
+        self.piston.set_target_level(
+            target_level, at_time=self.current_time, speed=speed
+        )
 
     def _validate_hole_size(self, dimension: int) -> None:
         if self.hole_diameter is None:
@@ -490,6 +535,53 @@ class Simulation:
             for speed, component in zip(particle.velocity, normal)
         )
 
+    def _predict_piston_event(
+        self, particle_index: int, particle: Particle
+    ) -> SimulationEvent | None:
+        if self.piston is None:
+            return None
+        axis = 0 if len(self.arena_sizes) == 1 else 1
+        start_time = particle.time
+        piston_position = self.piston.position_at(start_time)
+        piston_velocity = self.piston.velocity_at(start_time)
+        gap = piston_position - particle.position[axis] - particle.radius
+        tolerance = 1e-12 * max(1.0, self.arena_sizes[axis])
+        if gap < -tolerance:
+            raise ValueError("Particle has passed through the movable piston")
+        gap = max(0.0, gap)
+
+        relative_closing_speed = particle.velocity[axis] - piston_velocity
+        piston_is_moving = self.piston.is_moving(start_time)
+        recompute_after_stop = False
+        if relative_closing_speed > 0.0:
+            collision_time = start_time + gap / relative_closing_speed
+        elif piston_is_moving and particle.velocity[axis] > 0.0:
+            # The piston can move away from a particle, stop, and then be
+            # caught by that particle. Java predicts this second segment too.
+            collision_time = self.piston.stop_time
+            recompute_after_stop = True
+        else:
+            return None
+
+        if piston_is_moving:
+            stop_time = self.piston.stop_time
+            if recompute_after_stop or collision_time > stop_time:
+                gap_at_stop = (
+                    self.piston.position_at(stop_time)
+                    - (
+                        particle.position[axis]
+                        + particle.velocity[axis] * (stop_time - start_time)
+                        + particle.radius
+                    )
+                )
+                if particle.velocity[axis] <= 0.0 or gap_at_stop < -tolerance:
+                    return None
+                collision_time = stop_time + max(0.0, gap_at_stop) / particle.velocity[axis]
+
+        return SimulationEvent(
+            collision_time, "piston", (particle_index,), axis=axis
+        )
+
     def next_event(self) -> SimulationEvent | None:
         """Return the earliest predicted event without changing particle state."""
         candidates: list[SimulationEvent] = []
@@ -501,6 +593,9 @@ class Simulation:
                     candidates.append(
                         SimulationEvent(event_time, "wall", (index,), axis)
                     )
+                piston_event = self._predict_piston_event(index, particle)
+                if piston_event is not None:
+                    candidates.append(piston_event)
                 if (
                     self.wall_well_width is not None
                     and len(particle.position) >= 2
@@ -613,7 +708,7 @@ class Simulation:
 
         if not candidates:
             return None
-        # Deterministic tie order: particle collisions, wall/divider/well events,
+        # Deterministic tie order: particle/piston collisions, wall/divider/well events,
         # then edge and periodic-wrap events; indices break remaining ties.
         return min(
             candidates,
@@ -621,6 +716,7 @@ class Simulation:
                 event.time,
                 {
                     "particle": 0,
+                    "piston": 1,
                     "wall": 1,
                     "divider": 1,
                     "well_entry": 1,
@@ -679,6 +775,17 @@ class Simulation:
                 ),
                 thermostat=self.thermostat,
             )
+        elif event.kind == "piston":
+            (particle_index,) = event.particle_indices
+            if self.piston is None or event.axis is None:
+                raise ValueError("Piston event has no configured piston or collision axis")
+            self.particles[particle_index].collide_with_piston(
+                event.time,
+                event.axis,
+                self.piston.position_at(event.time),
+                self.piston.velocity_at(event.time),
+                thermostat=self.thermostat,
+            )
         elif event.kind == "divider":
             (particle_index,) = event.particle_indices
             if event.side is None:
@@ -732,5 +839,7 @@ class Simulation:
 
         for particle in self.particles:
             particle.move_to_time(target_time)
+        if self.piston is not None:
+            self.piston.move_to_time(target_time)
         self.current_time = target_time
         return tuple(processed)
