@@ -12,8 +12,9 @@ This checklist tracks feature parity between the Java application and the Python
 - [x] Pairwise attractive square-well interactions.
 - [x] Attractive wall well and lower-wall heat-reservoir behavior in 2D/3D.
 - [x] Collision-triggered forward and reverse reaction rules.
+- [x] Java wall-thermostat collision scaling and accumulated kinetic-energy tracking.
 - [ ] Compare each implemented behavior against Java, including edge cases and collision ordering.
-- [ ] Review Java thermostat behavior and implement any behavior not covered by the Python lower-wall reservoir.
+- [ ] Connect thermostat energy tracking to piston motion and Java's isothermal piston mode.
 - [ ] Review Java piston movement and particle interactions. Java's main physics source still contains a TODO for piston-particle interaction, so establish intended behavior before claiming parity.
 - [ ] Port remaining Java physics/statistics corrections, including finite-system and real-gas corrections where the Java application uses them.
 - [ ] Add support for multiple particle types and reaction relationships throughout the simulation model.

@@ -7,6 +7,7 @@ from typing import Literal
 
 from .particle import NO_COLLISION_TIME, Particle
 from .reaction import ReactionRule
+from .thermostat import WallThermostat
 
 
 BoundaryMode = Literal["reflecting", "periodic", "divided"]
@@ -57,11 +58,15 @@ class Simulation:
         wall_well_depth: float | None = None,
         heat_reservoir_temperature: float | None = None,
         reaction_rule: ReactionRule | None = None,
+        thermostat: WallThermostat | None = None,
     ):
         self.particles = list(particles)
         if reaction_rule is not None and not isinstance(reaction_rule, ReactionRule):
             raise ValueError("reaction_rule must be a ReactionRule")
         self.reaction_rule = reaction_rule
+        if thermostat is not None and not isinstance(thermostat, WallThermostat):
+            raise ValueError("thermostat must be a WallThermostat")
+        self.thermostat = thermostat
         if boundary_mode not in ("reflecting", "periodic", "divided"):
             raise ValueError("Boundary mode must be 'reflecting', 'periodic', or 'divided'")
         self.boundary_mode = boundary_mode
@@ -672,6 +677,7 @@ class Simulation:
                     if event.axis == 1
                     else None
                 ),
+                thermostat=self.thermostat,
             )
         elif event.kind == "divider":
             (particle_index,) = event.particle_indices

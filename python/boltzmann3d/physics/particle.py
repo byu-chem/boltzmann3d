@@ -5,6 +5,7 @@ import math
 import sys
 
 from .reaction import ReactionRule
+from .thermostat import WallThermostat
 
 
 NO_COLLISION_TIME = sys.float_info.max
@@ -456,6 +457,7 @@ class Particle:
         axis: int,
         *,
         heat_reservoir_temperature: float | None = None,
+        thermostat: WallThermostat | None = None,
     ) -> None:
         """Advance to a reflecting wall and reverse its axis velocity.
 
@@ -471,15 +473,28 @@ class Particle:
                 raise ValueError("Heat-reservoir temperature must be finite and nonnegative")
             if len(self.position) not in (2, 3) or axis != 1:
                 raise ValueError("The heat reservoir applies only to the lower-Y wall in 2D or 3D")
+        if thermostat is not None and not isinstance(thermostat, WallThermostat):
+            raise ValueError("thermostat must be a WallThermostat")
         speed = self.velocity[axis]
         if speed == 0.0:
             raise ValueError("A stationary axis has no wall collision to resolve")
 
         self.move_to_time(collision_time)
+        old_kinetic_energy_joules = (
+            0.5
+            * self.mass
+            * sum(component * component for component in self.velocity)
+            * _ATOMIC_MASS_UNIT_KILOGRAMS
+        )
         position = list(self.position)
         velocity = list(self.velocity)
         position[axis] = self.radius if speed < 0.0 else sizes[axis] - self.radius
-        velocity[axis] = -speed
+        multiplier = (
+            1.0
+            if thermostat is None
+            else thermostat.velocity_multiplier(self.mass, speed)
+        )
+        velocity[axis] = -speed * multiplier
         if heat_reservoir_temperature is not None and speed < 0.0:
             current_kinetic_energy = 0.5 * self.mass * sum(
                 component * component for component in velocity
@@ -504,6 +519,16 @@ class Particle:
             velocity[axis] -= velocity_change
         self.position = tuple(position)
         self.velocity = tuple(velocity)
+        if thermostat is not None:
+            new_kinetic_energy_joules = (
+                0.5
+                * self.mass
+                * sum(component * component for component in self.velocity)
+                * _ATOMIC_MASS_UNIT_KILOGRAMS
+            )
+            thermostat.record_energy_change(
+                new_kinetic_energy_joules - old_kinetic_energy_joules
+            )
 
     def _validate_divider(
         self, arena_sizes: tuple[float, ...], divider_half_width: float
