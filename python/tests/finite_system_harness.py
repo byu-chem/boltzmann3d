@@ -21,6 +21,9 @@ from boltzmann3d.physics import (
     real_gas_b2_correction,
     real_gas_effective_volume,
     real_gas_x,
+    predict_collision_rate_for_type,
+    predict_average_collision_rate,
+    predict_pressure,
 )
 
 
@@ -142,6 +145,133 @@ def main() -> None:
                     f"expected {expected}, got {actual}"
                 )
             print(f"Real-gas X {label} target type {target_type_index}: {actual:.15g}")
+    amu_kg = 1.660538782e-27
+    collision_rate_cases = {
+        "2D reflecting": (
+            420.952743504076,
+            (70e-9, 50e-9),
+            False,
+            False,
+            ((2279147033.78879, 2285938332.91838), (2811820187.93843, 2827325564.30993)),
+            (2492216295.44864, 2502493225.47500),
+        ),
+        "3D reflecting": (
+            280.635162336051,
+            (70e-9, 50e-9, 40e-9),
+            False,
+            False,
+            ((143566343.079022, 143585007.675659), (235136881.726603, 235209603.933665)),
+            (180194558.538054, 180234846.178861),
+        ),
+        "2D periodic": (
+            420.952743504076,
+            (70e-9, 50e-9),
+            True,
+            False,
+            ((2131659846.46618, 2138505639.00870), (2675395695.60433, 2695895210.91919)),
+            (2349154186.12144, 2361461467.77289),
+        ),
+        "3D divided": (
+            280.635162336051,
+            (70e-9, 50e-9, 40e-9),
+            False,
+            True,
+            ((305734078.349386, 305817883.424622), (496273802.433146, 496593522.123534)),
+            (381949967.982890, 382128138.904186),
+        ),
+        "3D divided with hole": (
+            280.635162336051,
+            (70e-9, 50e-9, 40e-9),
+            False,
+            False,
+            ((143566343.079022, 143585007.675659), (235136881.726603, 235209603.933665)),
+            (180194558.538054, 180234846.178861),
+        ),
+    }
+    for label, (collision_temperature, arena_sizes, periodic, divided, per_type, averages) in collision_rate_cases.items():
+        for target_type_index in range(2):
+            for apply_correction, expected in enumerate(per_type[target_type_index]):
+                actual = predict_collision_rate_for_type(
+                    target_type_index,
+                    (0.5e-9, 1.25e-9),
+                    (20.0 * amu_kg, 40.0 * amu_kg),
+                    (3, 2),
+                    collision_temperature,
+                    arena_sizes,
+                    periodic=periodic,
+                    divided=divided,
+                    real_gas_corrections=bool(apply_correction),
+                )
+                if abs(actual - expected) > abs(expected) * 1e-12:
+                    raise AssertionError(
+                        f"Collision rate {label} target {target_type_index} "
+                        f"correction={bool(apply_correction)} differs from Java: "
+                        f"expected {expected}, got {actual}"
+                    )
+                print(
+                    f"Collision rate {label} target {target_type_index} "
+                    f"corrected={bool(apply_correction)}: {actual:.15g} s^-1"
+                )
+        for apply_correction, expected in enumerate(averages):
+            actual = predict_average_collision_rate(
+                (0, 1),
+                (0.5e-9, 1.25e-9),
+                (20.0 * amu_kg, 40.0 * amu_kg),
+                (3, 2),
+                collision_temperature,
+                arena_sizes,
+                periodic=periodic,
+                divided=divided,
+                real_gas_corrections=bool(apply_correction),
+            )
+            if abs(actual - expected) > abs(expected) * 1e-12:
+                raise AssertionError(
+                    f"Average collision rate {label} correction={bool(apply_correction)} "
+                    f"differs from Java: expected {expected}, got {actual}"
+                )
+            print(
+                f"Average collision rate {label} corrected={bool(apply_correction)}: "
+                f"{actual:.15g} s^-1"
+            )
+    pressure_cases = {
+        "1D reflecting": (841.905487008152, (70e-9,), False, False),
+        "1D periodic": (841.905487008152, (70e-9,), True, False),
+        "2D reflecting": (420.952743504076, (70e-9, 50e-9), False, False),
+        "2D periodic": (420.952743504076, (70e-9, 50e-9), True, False),
+        "3D reflecting": (280.635162336051, (70e-9, 50e-9, 40e-9), False, False),
+        "3D divided": (280.635162336051, (70e-9, 50e-9, 40e-9), False, True),
+        "3D divided with hole": (280.635162336051, (70e-9, 50e-9, 40e-9), False, False),
+    }
+    java_pressure_outputs = {
+        "1D reflecting": (8.49789412108857e-13, 9.37400925322581e-13),
+        "1D periodic": (8.30269391000000e-13, 9.15974618458065e-13),
+        "2D reflecting": (8.78230056727859e-6, 8.82754085412083e-6),
+        "2D periodic": (8.30269391000000e-6, 8.35573341129598e-6),
+        "3D reflecting": (152.603666331701, 152.653899226430),
+        "3D divided": (322.428477813347, 322.651706783365),
+        "3D divided with hole": (152.603666331701, 152.653899226430),
+    }
+    for label, (pressure_temperature, arena_sizes, periodic, divided) in pressure_cases.items():
+        for apply_correction, expected in enumerate(java_pressure_outputs[label]):
+            actual = predict_pressure(
+                (0, 1),
+                (0.5e-9, 1.25e-9),
+                (3, 2),
+                pressure_temperature,
+                arena_sizes,
+                periodic=periodic,
+                divided=divided,
+                real_gas_corrections=bool(apply_correction),
+            )
+            if abs(actual - expected) > abs(expected) * 1e-12:
+                raise AssertionError(
+                    f"Pressure prediction {label} corrected={bool(apply_correction)} "
+                    f"differs from Java: expected {expected}, got {actual}"
+                )
+            print(
+                f"Pressure prediction {label} corrected={bool(apply_correction)}: "
+                f"{actual:.15g}"
+            )
     for dimension, expected in java_real_gas_b2_outputs.items():
         actual = real_gas_b2(0.5e-9, 1.25e-9, dimension)
         if abs(actual - expected) > abs(expected) * 1e-12:
@@ -315,6 +445,8 @@ def main() -> None:
     print("Real-gas B2 correction comparison PASS for arena cases")
     print("Effective-volume comparison PASS for arena cases")
     print("Real-gas X comparison PASS for multi-type arena cases")
+    print("Collision-rate prediction comparison PASS with real-gas option")
+    print("Pressure prediction comparison PASS with real-gas option")
 
 
 if __name__ == "__main__":

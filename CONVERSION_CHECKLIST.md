@@ -25,12 +25,14 @@ This checklist tracks feature parity between the Java application and the Python
 - [x] Port and compare Java's finite-system corrected average-speed prediction in 1D/2D/3D.
 - [x] Match Java's corrected RMS-speed behavior: ordinary RMS speed for nonperiodic arenas; periodic prediction remains unsupported.
 - [x] Port and compare Java's finite-system corrected velocity-width prediction in 1D/2D/3D; periodic prediction remains unsupported because corrected RMS speed is unsupported.
-- [ ] Port Java real-gas corrections where the statistics use them.
+- [x] Port Java's real-gas prediction corrections for collision rates and pressure.
   - [x] Port and compare the 2D/3D `realGasQx` polynomial.
   - [x] Port and compare the 1D/2D/3D `realGasB2` pair-radius term.
   - [x] Port and compare the finite-arena `realGasB2Correction` for reflecting, periodic, divided, and divided-with-hole cases.
   - [x] Port and compare Java's type-radius-adjusted effective volume in 1D/2D/3D arena cases.
   - [x] Port and compare `realGasX` for two particle types across reflecting, periodic, and divided arenas.
+  - [x] Apply `realGasX`/`realGasQx` to per-type and particle-count-weighted collision-rate predictions, with Java comparisons.
+  - [x] Apply Java's `1 + x * Q(x)` pressure correction in 2D/3D and excluded-length pressure correction in 1D.
 - [ ] Add support for multiple particle types and reaction relationships throughout the simulation model.
 - [ ] Replace or benchmark Python's all-pairs event search if it is too slow at the particle counts the application needs. Python currently recomputes candidate events instead of using Java's event calendar.
 
@@ -55,6 +57,7 @@ This checklist tracks feature parity between the Java application and the Python
 ## Statistics, plots, and delivery
 
 - [ ] Port Java statistics used by the application, such as temperature, pressure, speed distributions, and radial-distribution data where enabled.
+- [ ] Connect the ported collision-rate and pressure prediction functions to the Python statistics/readout layer.
 - [ ] Recreate the Java plots and readouts in the Python desktop interface.
 - [ ] Port supported project presets and save/load behavior.
 - [ ] Document installation, launch, settings, and controls for Python users.

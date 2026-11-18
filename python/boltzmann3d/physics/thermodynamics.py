@@ -161,6 +161,206 @@ def real_gas_x(
     return total_x
 
 
+def predict_collision_rate_for_type(
+    target_type_index: int,
+    particle_radii: tuple[float, ...],
+    particle_masses_kg: tuple[float, ...],
+    particle_counts: tuple[int, ...],
+    temperature_kelvin: float,
+    arena_sizes: tuple[float, ...],
+    periodic: bool = False,
+    divided: bool = False,
+    real_gas_corrections: bool = False,
+    divider_radius: float = 1.0e-9,
+) -> float:
+    """Predict a particle type's collision rate, optionally using Java's real-gas factor.
+
+    Returns collisions per second when lengths are in meters, masses are in
+    kilograms, and temperature is in kelvin. As in Java, the pair-rate
+    calculation subtracts one same-type particle even for periodic arenas;
+    ``realGasX`` follows its own periodic self-count rule.
+    """
+    dimension = len(arena_sizes)
+    type_count = len(particle_counts)
+    if not (len(particle_radii) == len(particle_masses_kg) == type_count):
+        raise ValueError("Radii, masses, and counts must describe the same particle types")
+    if not 0 <= target_type_index < type_count:
+        raise ValueError("Target particle type index is out of range")
+    if dimension not in (1, 2, 3):
+        raise ValueError("Collision-rate prediction requires a 1D, 2D, or 3D arena")
+
+    target_radius = particle_radii[target_type_index]
+    target_mass = particle_masses_kg[target_type_index]
+    collision_rate = 0.0
+    for collision_type_index, (radius, mass, count) in enumerate(
+        zip(particle_radii, particle_masses_kg, particle_counts)
+    ):
+        collision_count = count - (1 if collision_type_index == target_type_index else 0)
+        radii_sum = target_radius + radius
+        if dimension == 1:
+            collision_cross_section = 1.0
+        elif dimension == 2:
+            collision_cross_section = 2.0 * radii_sum
+        else:
+            collision_cross_section = pi * radii_sum * radii_sum
+
+        reduced_mass = target_mass * mass / (target_mass + mass)
+        if dimension == 3:
+            relative_speed = sqrt(
+                8.0
+                * BOLTZMANN_CONSTANT_JOULES_PER_KELVIN
+                * temperature_kelvin
+                / (pi * reduced_mass)
+            )
+        else:
+            relative_speed = sqrt(
+                pi
+                * BOLTZMANN_CONSTANT_JOULES_PER_KELVIN
+                * temperature_kelvin
+                / (2.0 * reduced_mass)
+            )
+        volume = real_gas_effective_volume(
+            arena_sizes,
+            radius,
+            periodic=periodic,
+            divided=divided,
+            divider_radius=divider_radius,
+        )
+        collision_rate += collision_count * collision_cross_section * relative_speed / volume
+
+    if real_gas_corrections and dimension > 1:
+        x = real_gas_x(
+            target_type_index,
+            particle_radii,
+            particle_counts,
+            arena_sizes,
+            periodic=periodic,
+            divided=divided,
+            divider_radius=divider_radius,
+        )
+        collision_rate *= real_gas_correction_factor(x, dimension)
+    return collision_rate
+
+
+def predict_average_collision_rate(
+    selected_type_indices: tuple[int, ...],
+    particle_radii: tuple[float, ...],
+    particle_masses_kg: tuple[float, ...],
+    particle_counts: tuple[int, ...],
+    temperature_kelvin: float,
+    arena_sizes: tuple[float, ...],
+    periodic: bool = False,
+    divided: bool = False,
+    real_gas_corrections: bool = False,
+    divider_radius: float = 1.0e-9,
+) -> float:
+    """Return Java's particle-count-weighted mean collision rate."""
+    total_particles = sum(particle_counts[index] for index in selected_type_indices)
+    if total_particles == 0:
+        return 0.0
+    weighted_rate = sum(
+        predict_collision_rate_for_type(
+            index,
+            particle_radii,
+            particle_masses_kg,
+            particle_counts,
+            temperature_kelvin,
+            arena_sizes,
+            periodic=periodic,
+            divided=divided,
+            real_gas_corrections=real_gas_corrections,
+            divider_radius=divider_radius,
+        )
+        * particle_counts[index]
+        for index in selected_type_indices
+    )
+    return weighted_rate / total_particles
+
+
+def predict_pressure(
+    selected_type_indices: tuple[int, ...],
+    particle_radii: tuple[float, ...],
+    particle_counts: tuple[int, ...],
+    temperature_kelvin: float,
+    arena_sizes: tuple[float, ...],
+    periodic: bool = False,
+    divided: bool = False,
+    real_gas_corrections: bool = False,
+    divider_radius: float = 1.0e-9,
+) -> float:
+    """Predict pressure, applying Java's dimension-specific real-gas correction.
+
+    The returned unit is the ideal-gas pressure unit for the dimension: N in
+    1D, N/m in 2D, or Pa in 3D. Lengths must be meters. Java's 1D correction
+    uses an excluded-volume adjustment; 2D/3D use ``1 + x * Q(x)``.
+    """
+    if len(particle_radii) != len(particle_counts):
+        raise ValueError("Particle radii and counts must have the same number of types")
+    dimension = len(arena_sizes)
+    if dimension not in (1, 2, 3):
+        raise ValueError("Pressure prediction requires a 1D, 2D, or 3D arena")
+
+    pressure_by_type: dict[int, float] = {}
+    for type_index in selected_type_indices:
+        volume = real_gas_effective_volume(
+            arena_sizes,
+            particle_radii[type_index],
+            periodic=periodic,
+            divided=divided,
+            divider_radius=divider_radius,
+        )
+        pressure_by_type[type_index] = (
+            particle_counts[type_index]
+            * BOLTZMANN_CONSTANT_JOULES_PER_KELVIN
+            * temperature_kelvin
+            / volume
+        )
+
+    if real_gas_corrections:
+        if dimension > 1:
+            for type_index in selected_type_indices:
+                x = real_gas_x(
+                    type_index,
+                    particle_radii,
+                    particle_counts,
+                    arena_sizes,
+                    periodic=periodic,
+                    divided=divided,
+                    divider_radius=divider_radius,
+                )
+                pressure_by_type[type_index] *= 1.0 + x * real_gas_correction_factor(
+                    x, dimension
+                )
+        else:
+            arena_length = arena_sizes[0]
+            if divided:
+                arena_length = arena_length / 2.0 - divider_radius
+            excluded_length = 2.0 * sum(
+                particle_radii[index] * particle_counts[index]
+                for index in selected_type_indices
+            )
+            selected_count = sum(particle_counts[index] for index in selected_type_indices)
+            corrected_volume = arena_length - excluded_length
+            for type_index in selected_type_indices:
+                try:
+                    pressure_by_type[type_index] *= real_gas_effective_volume(
+                        arena_sizes,
+                        particle_radii[type_index],
+                        periodic=periodic,
+                        divided=divided,
+                        divider_radius=divider_radius,
+                    )
+                    pressure_by_type[type_index] /= corrected_volume
+                except (ArithmeticError, ValueError):
+                    pressure_by_type[type_index] = 0.0
+            if periodic and selected_count > 0 and arena_length > 0.0:
+                periodic_factor = 1.0 - excluded_length / (selected_count * arena_length)
+                for type_index in selected_type_indices:
+                    pressure_by_type[type_index] *= periodic_factor
+
+    return sum(pressure_by_type.values())
+
+
 def average_kinetic_energy_joules(temperature_kelvin: float, dimension: int) -> float:
     """Return Java's equipartition prediction for mean kinetic energy."""
     return (

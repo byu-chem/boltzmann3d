@@ -20,6 +20,9 @@ from .thermodynamics import (
     real_gas_b2_correction,
     real_gas_effective_volume,
     real_gas_x,
+    predict_collision_rate_for_type,
+    predict_average_collision_rate,
+    predict_pressure,
 )
 from .thermostat import WallThermostat
 
@@ -46,5 +49,8 @@ __all__ = [
     "real_gas_b2_correction",
     "real_gas_effective_volume",
     "real_gas_x",
+    "predict_collision_rate_for_type",
+    "predict_average_collision_rate",
+    "predict_pressure",
     "WallThermostat",
 ]
