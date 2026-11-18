@@ -17,7 +17,7 @@ from panda3d.core import (
     WindowProperties,
 )
 
-from ..physics import Particle, Piston, ReactionRule, Simulation
+from ..physics import Particle, Piston, PistonMode, ReactionRule, Simulation
 
 
 class EnergyWell3DScene:
@@ -42,6 +42,7 @@ class EnergyWell3DScene:
         self.wall_well_enabled = False
         self.heat_reservoir_enabled = False
         self.mode = "pass"
+        self.piston_mode = PistonMode.ADIABATIC
         self.last_event = "Approaching the interaction well in 3D"
 
         self._add_lighting()
@@ -60,6 +61,7 @@ class EnergyWell3DScene:
         app.accept("w", self._toggle_wall_well)
         app.accept("h", self._toggle_heat_reservoir)
         app.accept("p", self._toggle_piston)
+        app.accept("i", self._toggle_piston_mode)
 
     def _add_lighting(self) -> None:
         ambient = AmbientLight("well-3d-ambient")
@@ -132,7 +134,7 @@ class EnergyWell3DScene:
 
     def _add_instructions(self) -> None:
         self.instructions = OnscreenText(
-            text="1: pass  2: trapped  3: red→blue  4: blue→red  P: piston  W: wall well  H: reservoir  SPACE: pause  R: reset",
+            text="1/2: well  3/4: reaction  P: piston  I: piston mode  W: wall well  H: reservoir  SPACE: pause  R: reset",
             pos=(-1.28, 0.92),
             scale=0.045,
             align=TextNode.ALeft,
@@ -211,6 +213,8 @@ class EnergyWell3DScene:
                 speed=self.PISTON_SPEED,
             ),
         )
+        if self.piston_mode is PistonMode.ISOTHERMAL:
+            self.simulation.set_piston_mode(self.piston_mode)
         if self.wall_well_enabled:
             self.wall_well_marker.show()
         else:
@@ -231,7 +235,7 @@ class EnergyWell3DScene:
     def destroy(self) -> None:
         """Remove this scene before the Panda3D app switches dimensions."""
         self.app.taskMgr.remove("energy-well-3d-update")
-        for key in ("1", "2", "3", "4", "p", "r", "space", "w", "h"):
+        for key in ("1", "2", "3", "4", "p", "i", "r", "space", "w", "h"):
             self.app.ignore(key)
         self.instructions.destroy()
         self.status.destroy()
@@ -263,6 +267,15 @@ class EnergyWell3DScene:
         )
         direction = "outward" if next_target == 0.0 else "inward"
         self.last_event = f"Piston moving {direction}"
+
+    def _toggle_piston_mode(self) -> None:
+        self.piston_mode = (
+            PistonMode.ADIABATIC
+            if self.piston_mode is PistonMode.ISOTHERMAL
+            else PistonMode.ISOTHERMAL
+        )
+        self.simulation.set_piston_mode(self.piston_mode)
+        self.last_event = f"Piston mode set to {self.piston_mode.value}"
 
     def _update(self, task: Task) -> int:
         if not self.paused:
@@ -299,6 +312,8 @@ class EnergyWell3DScene:
 
         piston = self.simulation.piston
         self.piston_marker.setY(piston.position)
+        thermostat = self.simulation.thermostat
+        delta_ke = 0.0 if thermostat is None else thermostat.delta_ke_joules
         first, second = self.simulation.particles
         separation = math.dist(first.position, second.position)
         state = "INSIDE WELL" if separation <= self.WELL_RADIUS else "OUTSIDE WELL"
@@ -310,7 +325,8 @@ class EnergyWell3DScene:
             else "OFF"
         )
         self.status.setText(
-            f"{self.mode_label}  |  {pause_label}  |  PISTON Y={piston.position:.1f}  |  "
+            f"{self.mode_label}  |  {pause_label}  |  PISTON {self.piston_mode.value.upper()} "
+            f"Y={piston.position:.1f}  |  ΔKE={delta_ke:+.2e} J  |  "
             f"WALL WELL {wall_label}  |  "
             f"RESERVOIR {reservoir_label}  |  {state}  |  "
             f"separation={separation:.2f}  |  t={self.simulation.current_time:.2f}\n"

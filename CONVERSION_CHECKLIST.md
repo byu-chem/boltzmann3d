@@ -14,8 +14,9 @@ This checklist tracks feature parity between the Java application and the Python
 - [x] Collision-triggered forward and reverse reaction rules.
 - [x] Java wall-thermostat collision scaling and accumulated kinetic-energy tracking.
 - [x] Basic movable-piston kinematics and particle collisions in 1D, 2D, and 3D.
+- [x] Adiabatic/isothermal piston mode switching and isothermal coupling to wall-thermostat energy tracking.
 - [ ] Compare each implemented behavior against Java, including edge cases and collision ordering.
-- [ ] Connect the wall thermostat to Java's isothermal piston mode and compare energy tracking.
+- [x] Compare controlled 1D/2D/3D isothermal piston impacts and following thermostat-adjusted wall collisions against Java particle methods.
 - [ ] Compare piston event ordering and edge cases against Java. Java's main physics source still contains a TODO for piston-particle interaction, so verify intended behavior before claiming parity.
 - [ ] Port remaining Java physics/statistics corrections, including finite-system and real-gas corrections where the Java application uses them.
 - [ ] Add support for multiple particle types and reaction relationships throughout the simulation model.

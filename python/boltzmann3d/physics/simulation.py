@@ -6,7 +6,7 @@ import math
 from typing import Literal
 
 from .particle import NO_COLLISION_TIME, Particle
-from .piston import Piston
+from .piston import Piston, PistonMode
 from .reaction import ReactionRule
 from .thermostat import WallThermostat
 
@@ -327,14 +327,40 @@ class Simulation:
         self.hole_open = is_open
 
     def set_piston_target_level(
-        self, target_level: float, *, speed: float | None = None
+        self,
+        target_level: float,
+        *,
+        speed: float | None = None,
+        mode: PistonMode | None = None,
     ) -> None:
-        """Start moving the configured piston toward a new level."""
+        """Move the piston and optionally choose its adiabatic/isothermal mode.
+
+        Isothermal mode enables the wall thermostat while retaining its
+        accumulated energy balance. Adiabatic mode resets and disables it, as
+        Java's ``AdjustPistonLevel`` overload does. Omitting ``mode`` preserves
+        the current thermostat state.
+        """
         if self.piston is None:
             raise ValueError("This simulation has no movable piston")
+        if mode is not None:
+            self.set_piston_mode(mode)
         self.piston.set_target_level(
             target_level, at_time=self.current_time, speed=speed
         )
+
+    def set_piston_mode(self, mode: PistonMode) -> None:
+        """Set the piston thermostat mode without changing its target."""
+        if self.piston is None:
+            raise ValueError("This simulation has no movable piston")
+        if not isinstance(mode, PistonMode):
+            raise ValueError("Piston mode must be a PistonMode value")
+        if mode is PistonMode.ISOTHERMAL:
+            if self.thermostat is None:
+                self.thermostat = WallThermostat()
+            self.thermostat.enabled = True
+        else:
+            if self.thermostat is not None:
+                self.thermostat.reset(enabled=False)
 
     def _validate_hole_size(self, dimension: int) -> None:
         if self.hole_diameter is None:

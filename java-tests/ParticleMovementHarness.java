@@ -5,8 +5,11 @@ import edu.byu.chem.boltzmann.model.physics.Collision;
 import edu.byu.chem.boltzmann.model.physics.Calendar;
 import edu.byu.chem.boltzmann.model.physics.EventInfo;
 import edu.byu.chem.boltzmann.model.physics.Thermostat;
+import edu.byu.chem.boltzmann.model.physics.Piston;
+import edu.byu.chem.boltzmann.model.physics.WallController;
 import edu.byu.chem.boltzmann.model.physics.Wall;
 import edu.byu.chem.boltzmann.utils.Units;
+import edu.byu.chem.boltzmann.utils.Units.Energy;
 import edu.byu.chem.boltzmann.utils.data.ParticleType;
 import edu.byu.chem.boltzmann.utils.data.ReactionRelationship;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo;
@@ -52,6 +55,9 @@ public final class ParticleMovementHarness {
         testThreeDimensionalParticleCollision();
         testPeriodicParticleCollisionAcrossBoundary();
         testOneDimensionalWallHandling();
+        testOneDimensionalIsothermalPistonAndThermostat();
+        testTwoDimensionalIsothermalPistonAndThermostat();
+        testThreeDimensionalIsothermalPistonAndThermostat();
         testTwoDimensionalWallHandling();
         testThreeDimensionalWallHandling();
         testOneDimensionalDividerHandling();
@@ -715,6 +721,144 @@ public final class ParticleMovementHarness {
                 "Periodic image collision PASS in 1D/2D/3D: time=0.25 velocities=(1.0, -1.0)");
     }
 
+    private static void testOneDimensionalIsothermalPistonAndThermostat() {
+        ParticleType particleType = new ParticleType(1.0, 1.0, Color.RED, "piston-test");
+        SimulationInfo simulationInfo = createSimulationInfo(
+                particleType, 1, 20.0, 0.0, 0.0,
+                SimulationInfo.ArenaType.MOVABLE_PISTON);
+        Particle1D particle = new Particle1D(
+                new double[]{5.0}, new double[]{1.0}, 0.0,
+                particleType, simulationInfo);
+        Piston piston = new Piston(0.0, 0.0, 0.5, simulationInfo);
+        piston.setSpeed(2.0);
+        piston.setTargetLevel(0.5);
+        Thermostat thermostat = new Thermostat(true);
+        thermostat.setThermostatController(new WallController());
+
+        EventInfo pistonEvent = particle.predPistonCol(piston);
+        if (pistonEvent.colType != Collision.PISTON) {
+            throw new AssertionError("expected piston event, got " + pistonEvent.colType);
+        }
+        assertClose("Java piston event time", pistonEvent.colTime, 14.0 / 3.0);
+        particle.boundaryCollide(pistonEvent, piston, thermostat);
+        assertClose("Java piston impact position", particle.getX(), 29.0 / 3.0);
+        assertClose("Java piston impact velocity", particle.getXVel(), -5.0);
+        assertCloseRelative(
+                "Java piston accumulated deltaKE", thermostat.getDeltaKE(),
+                Units.convert(Energy.AMU_JOULE, Energy.JOULE, 12.0));
+
+        double wallTime = pistonEvent.colTime + (particle.getX() - particle.getRadius()) / 5.0;
+        EventInfo wallEvent = new EventInfo(
+                Collision.WALL, wallTime, 0, 0, Wall.LEFT);
+        particle.boundaryCollide(wallEvent, piston, thermostat);
+        assertClose("Java thermostat wall velocity", particle.getXVel(), Math.sqrt(12.5));
+        assertCloseRelative(
+                "Java post-wall accumulated deltaKE", thermostat.getDeltaKE(),
+                Units.convert(Energy.AMU_JOULE, Energy.JOULE, 5.75));
+
+        System.out.printf(Locale.ROOT,
+                "Isothermal piston: event=%.15g x=%.15g vx=%.15g deltaKE=%.15g J%n",
+                pistonEvent.colTime, 29.0 / 3.0, -5.0,
+                Units.convert(Energy.AMU_JOULE, Energy.JOULE, 12.0));
+        System.out.printf(Locale.ROOT,
+                "Thermostat wall: event=%.15g x=%.15g vx=%.15g deltaKE=%.15g J%n",
+                wallTime, particle.getX(), particle.getXVel(), thermostat.getDeltaKE());
+    }
+
+    private static void testTwoDimensionalIsothermalPistonAndThermostat() {
+        ParticleType particleType = new ParticleType(1.0, 1.0, Color.RED, "piston-test");
+        SimulationInfo simulationInfo = createSimulationInfo(
+                particleType, 2, 20.0, 20.0, 0.0,
+                SimulationInfo.ArenaType.MOVABLE_PISTON);
+        Particle2D particle = new Particle2D(
+                new double[]{5.0, 5.0}, new double[]{0.5, 1.0}, 0.0,
+                particleType, simulationInfo);
+        Piston piston = new Piston(0.0, 0.0, 0.5, simulationInfo);
+        piston.setSpeed(2.0);
+        piston.setTargetLevel(0.5);
+        Thermostat thermostat = new Thermostat(true);
+        thermostat.setThermostatController(new WallController());
+
+        EventInfo pistonEvent = particle.predPistonCol(piston);
+        assertClose("Java 2D piston event time", pistonEvent.colTime, 14.0 / 3.0);
+        particle.boundaryCollide(pistonEvent, piston, thermostat);
+        assertClose("Java 2D piston x", particle.getX(), 22.0 / 3.0);
+        assertClose("Java 2D piston y", particle.getY(), 29.0 / 3.0);
+        assertClose("Java 2D piston vx", particle.getXVel(), 0.5);
+        assertClose("Java 2D piston vy", particle.getYVel(), -5.0);
+        assertCloseRelative(
+                "Java 2D piston deltaKE", thermostat.getDeltaKE(),
+                Units.convert(Energy.AMU_JOULE, Energy.JOULE, 12.0));
+
+        double wallTime = pistonEvent.colTime + (particle.getY() - particle.getRadius()) / 5.0;
+        particle.boundaryCollide(
+                new EventInfo(Collision.WALL, wallTime, 0, 0, Wall.BOTTOM),
+                piston, thermostat);
+        assertClose("Java 2D thermostat vx", particle.getXVel(), 0.5);
+        assertClose("Java 2D thermostat vy", particle.getYVel(), Math.sqrt(12.5));
+        assertCloseRelative(
+                "Java 2D post-wall deltaKE", thermostat.getDeltaKE(),
+                Units.convert(Energy.AMU_JOULE, Energy.JOULE, 5.75));
+        System.out.printf(Locale.ROOT,
+                "2D isothermal piston: event=%.15g p=(%.15g,%.15g) v=(%.15g,%.15g) deltaKE=%.15g J%n",
+                pistonEvent.colTime, 22.0 / 3.0, 29.0 / 3.0, 0.5, -5.0,
+                Units.convert(Energy.AMU_JOULE, Energy.JOULE, 12.0));
+        System.out.printf(Locale.ROOT,
+                "2D thermostat wall: event=%.15g p=(%.15g,%.15g) v=(%.15g,%.15g) deltaKE=%.15g J%n",
+                wallTime, particle.getX(), particle.getY(), particle.getXVel(),
+                particle.getYVel(), thermostat.getDeltaKE());
+    }
+
+    private static void testThreeDimensionalIsothermalPistonAndThermostat() {
+        ParticleType particleType = new ParticleType(1.0, 1.0, Color.RED, "piston-test");
+        SimulationInfo simulationInfo = createSimulationInfo(
+                particleType, 3, 20.0, 20.0, 20.0,
+                SimulationInfo.ArenaType.MOVABLE_PISTON);
+        Particle3D particle = new Particle3D(
+                new double[]{5.0, 5.0, 5.0},
+                new double[]{0.5, 1.0, 0.25}, 0.0,
+                particleType, simulationInfo);
+        Piston piston = new Piston(0.0, 0.0, 0.5, simulationInfo);
+        piston.setSpeed(2.0);
+        piston.setTargetLevel(0.5);
+        Thermostat thermostat = new Thermostat(true);
+        thermostat.setThermostatController(new WallController());
+
+        EventInfo pistonEvent = particle.predPistonCol(piston);
+        assertClose("Java 3D piston event time", pistonEvent.colTime, 14.0 / 3.0);
+        particle.boundaryCollide(pistonEvent, piston, thermostat);
+        assertClose("Java 3D piston x", particle.getX(), 22.0 / 3.0);
+        assertClose("Java 3D piston y", particle.getY(), 29.0 / 3.0);
+        assertClose("Java 3D piston z", particle.getZ(), 37.0 / 6.0);
+        assertClose("Java 3D piston vx", particle.getXVel(), 0.5);
+        assertClose("Java 3D piston vy", particle.getYVel(), -5.0);
+        assertClose("Java 3D piston vz", particle.getZVel(), 0.25);
+        assertCloseRelative(
+                "Java 3D piston deltaKE", thermostat.getDeltaKE(),
+                Units.convert(Energy.AMU_JOULE, Energy.JOULE, 12.0));
+
+        double wallTime = pistonEvent.colTime + (particle.getY() - particle.getRadius()) / 5.0;
+        particle.boundaryCollide(
+                new EventInfo(Collision.WALL, wallTime, 0, 0, Wall.BOTTOM),
+                piston, thermostat);
+        assertClose("Java 3D thermostat vx", particle.getXVel(), 0.5);
+        assertClose("Java 3D thermostat vy", particle.getYVel(), Math.sqrt(12.5));
+        assertClose("Java 3D thermostat vz", particle.getZVel(), 0.25);
+        assertCloseRelative(
+                "Java 3D post-wall deltaKE", thermostat.getDeltaKE(),
+                Units.convert(Energy.AMU_JOULE, Energy.JOULE, 5.75));
+        System.out.printf(Locale.ROOT,
+                "3D isothermal piston: event=%.15g p=(%.15g,%.15g,%.15g) v=(%.15g,%.15g,%.15g) deltaKE=%.15g J%n",
+                pistonEvent.colTime, 22.0 / 3.0, 29.0 / 3.0, 37.0 / 6.0,
+                0.5, -5.0, 0.25,
+                Units.convert(Energy.AMU_JOULE, Energy.JOULE, 12.0));
+        System.out.printf(Locale.ROOT,
+                "3D thermostat wall: event=%.15g p=(%.15g,%.15g,%.15g) v=(%.15g,%.15g,%.15g) deltaKE=%.15g J%n",
+                wallTime, particle.getX(), particle.getY(), particle.getZ(),
+                particle.getXVel(), particle.getYVel(), particle.getZVel(),
+                thermostat.getDeltaKE());
+    }
+
     private static void testOneDimensionalWallHandling() {
         ParticleType particleType = new ParticleType(1.0, 1.0, Color.RED, "test");
         SimulationInfo reflectingInfo = createReflectingSimulationInfo(particleType, 1, 10.0, 10.0, 10.0);
@@ -1142,6 +1286,15 @@ public final class ParticleMovementHarness {
 
     private static void assertClose(String label, double actual, double expected) {
         if (Math.abs(actual - expected) > TOLERANCE) {
+            throw new AssertionError(
+                    label + " expected " + expected + " but got " + actual);
+        }
+    }
+
+    private static void assertCloseRelative(
+            String label, double actual, double expected) {
+        double tolerance = Math.max(1.0e-40, Math.abs(expected) * 1.0e-12);
+        if (Math.abs(actual - expected) > tolerance) {
             throw new AssertionError(
                     label + " expected " + expected + " but got " + actual);
         }

@@ -15,9 +15,8 @@ class WallThermostat:
 
     ``delta_ke_joules`` is the accumulated change in particle kinetic energy,
     matching Java's ``Thermostat.deltaKE``. Java's isothermal piston updates
-    this value as piston collisions add or remove energy. Piston integration
-    can be added independently; callers may currently supply/update this
-    energy balance directly.
+    this value as piston collisions add or remove energy. Selecting
+    ``PistonMode.ISOTHERMAL`` enables the same accumulator for piston motion.
     """
 
     enabled: bool = False
@@ -33,6 +32,14 @@ class WallThermostat:
             raise ValueError("Thermostat energy change must be finite")
         if not math.isfinite(self.damp_factor) or self.damp_factor < 0.0:
             raise ValueError("Thermostat damp factor must be finite and nonnegative")
+
+    def reset(self, enabled: bool = False) -> None:
+        """Reset the accumulated energy and restore Java's default damp factor."""
+        if not isinstance(enabled, bool):
+            raise ValueError("Thermostat enabled setting must be a boolean")
+        self.enabled = enabled
+        self.delta_ke_joules = 0.0
+        self.damp_factor = 0.1
 
     @property
     def active(self) -> bool:

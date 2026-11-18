@@ -1,7 +1,15 @@
 """Kinematics for the Java-style movable piston."""
 
 from dataclasses import dataclass
+from enum import Enum
 import math
+
+
+class PistonMode(Enum):
+    """Supported moving-piston thermostat modes from the Java application."""
+
+    ADIABATIC = "adiabatic"
+    ISOTHERMAL = "isothermal"
 
 
 @dataclass
