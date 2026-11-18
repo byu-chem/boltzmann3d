@@ -7,3 +7,6 @@ Contact info:
 
 To run Boltzmann 3D, use:
   ant run
+
+To run Boltzmann 3D in python, use:
+PYTHONPATH=python python -m boltzmann3d.panda3d.well_demo

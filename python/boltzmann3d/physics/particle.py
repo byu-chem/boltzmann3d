@@ -9,6 +9,8 @@ NO_COLLISION_TIME = sys.float_info.max
 _KILOJOULE_PER_MOLE_TO_AMU_M2_PER_S2 = (
     1_000.0 / 6.02214179e23 / 1.660538782e-27
 )
+_BOLTZMANN_CONSTANT_JOULES_PER_KELVIN = 1.3806504e-23
+_ATOMIC_MASS_UNIT_KILOGRAMS = 1.660538782e-27
 
 
 @dataclass
@@ -216,6 +218,34 @@ class Particle:
         other.time_since_collision = 0.0
         return not entering
 
+    def cross_attractive_wall_well(
+        self, collision_time: float, well_width: float, well_depth: float
+    ) -> None:
+        """Apply Java's attractive-wall velocity change at the well boundary.
+
+        The Java simulation places this well against the lower Y wall in 2D
+        and 3D. At either crossing it subtracts ``sqrt(2E/m)`` from the Y
+        velocity, with the depth converted from kJ/mol to amu·m²/s².
+        """
+        if len(self.position) not in (2, 3):
+            raise ValueError("Attractive wall wells require a 2D or 3D particle")
+        well_width = float(well_width)
+        well_depth = float(well_depth)
+        if not math.isfinite(well_width) or well_width <= 0.0:
+            raise ValueError("Attractive wall well width must be finite and positive")
+        if not math.isfinite(well_depth) or well_depth < 0.0:
+            raise ValueError("Attractive wall well depth must be finite and nonnegative")
+
+        self.move_to_time(collision_time)
+        position = list(self.position)
+        position[1] = well_width
+        self.position = tuple(position)
+        energy = well_depth * _KILOJOULE_PER_MOLE_TO_AMU_M2_PER_S2
+        velocity_change = math.sqrt(2.0 * energy / self.mass)
+        velocity = list(self.velocity)
+        velocity[1] -= velocity_change
+        self.velocity = tuple(velocity)
+
     def predict_collision_time(
         self,
         other: "Particle",
@@ -328,12 +358,27 @@ class Particle:
         return min(candidates) if candidates else (NO_COLLISION_TIME, None)
 
     def collide_with_wall(
-        self, collision_time: float, arena_sizes: tuple[float, ...], axis: int
+        self,
+        collision_time: float,
+        arena_sizes: tuple[float, ...],
+        axis: int,
+        *,
+        heat_reservoir_temperature: float | None = None,
     ) -> None:
-        """Advance to a predicted reflecting wall and reverse its axis velocity."""
+        """Advance to a reflecting wall and reverse its axis velocity.
+
+        When ``heat_reservoir_temperature`` is supplied for a lower-Y wall
+        collision, apply Java's bounded wall-reservoir velocity adjustment.
+        """
         sizes = self._validate_wall_arena(arena_sizes)
         if not isinstance(axis, int) or axis < 0 or axis >= len(self.position):
             raise ValueError("Wall axis must identify a particle coordinate")
+        if heat_reservoir_temperature is not None:
+            heat_reservoir_temperature = float(heat_reservoir_temperature)
+            if not math.isfinite(heat_reservoir_temperature) or heat_reservoir_temperature < 0.0:
+                raise ValueError("Heat-reservoir temperature must be finite and nonnegative")
+            if len(self.position) not in (2, 3) or axis != 1:
+                raise ValueError("The heat reservoir applies only to the lower-Y wall in 2D or 3D")
         speed = self.velocity[axis]
         if speed == 0.0:
             raise ValueError("A stationary axis has no wall collision to resolve")
@@ -343,6 +388,28 @@ class Particle:
         velocity = list(self.velocity)
         position[axis] = self.radius if speed < 0.0 else sizes[axis] - self.radius
         velocity[axis] = -speed
+        if heat_reservoir_temperature is not None and speed < 0.0:
+            current_kinetic_energy = 0.5 * self.mass * sum(
+                component * component for component in velocity
+            )
+            normal_kinetic_energy = 0.5 * self.mass * velocity[axis] ** 2
+            target_energy_joules = (
+                len(self.position)
+                * _BOLTZMANN_CONSTANT_JOULES_PER_KELVIN
+                * heat_reservoir_temperature
+                / 2.0
+            )
+            target_kinetic_energy = (
+                target_energy_joules / _ATOMIC_MASS_UNIT_KILOGRAMS
+            )
+            energy_adjustment = min(
+                abs(target_kinetic_energy - current_kinetic_energy),
+                normal_kinetic_energy * 0.1,
+            )
+            velocity_change = math.sqrt(2.0 * energy_adjustment / self.mass)
+            if target_kinetic_energy > current_kinetic_energy:
+                velocity_change = -velocity_change
+            velocity[axis] -= velocity_change
         self.position = tuple(position)
         self.velocity = tuple(velocity)
 

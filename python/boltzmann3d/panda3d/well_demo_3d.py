@@ -27,18 +27,23 @@ class EnergyWell3DScene:
     PARTICLE_RADIUS = 0.75
     INTERACTION_RADIUS_MULTIPLIER = 2.0
     WELL_RADIUS = INTERACTION_RADIUS_MULTIPLIER * 2.0 * PARTICLE_RADIUS
-    WELL_DEPTH = 0.25  # kJ/mol
+    WELL_DEPTH = 0.0001  # kJ/mol, sized for the demo's displayed velocities.
+    WALL_WELL_WIDTH = 6.0
+    RESERVOIR_TEMPERATURE = 315.0
     SIMULATION_SPEED = 1.0
 
     def __init__(self, app: ShowBase) -> None:
         self.app = app
         self.root = app.render.attachNewNode("energy-well-3d-demo")
         self.paused = False
+        self.wall_well_enabled = False
+        self.heat_reservoir_enabled = False
         self.mode = "pass"
         self.last_event = "Approaching the interaction well in 3D"
 
         self._add_lighting()
         self._add_arena()
+        self._add_wall_well_marker()
         self._add_particles()
         self._add_instructions()
         self._reset_simulation("pass")
@@ -47,6 +52,8 @@ class EnergyWell3DScene:
         app.accept("2", self._reset_simulation, ["trap"])
         app.accept("r", self._reset_current_mode)
         app.accept("space", self._toggle_pause)
+        app.accept("w", self._toggle_wall_well)
+        app.accept("h", self._toggle_heat_reservoir)
 
     def _add_lighting(self) -> None:
         ambient = AmbientLight("well-3d-ambient")
@@ -94,9 +101,22 @@ class EnergyWell3DScene:
             self.particle_nodes.append(sphere)
         sphere_model.removeNode()
 
+    def _add_wall_well_marker(self) -> None:
+        width, _, height = self.ARENA_SIZES
+        y = self.WALL_WELL_WIDTH
+        corners = ((0.0, y, 0.0), (width, y, 0.0), (width, y, height), (0.0, y, height))
+        marker = LineSegs("attractive-wall-well-marker")
+        marker.setThickness(2.0)
+        marker.setColor(1.0, 0.72, 0.25, 1.0)
+        marker.moveTo(*corners[0])
+        for corner in corners[1:] + corners[:1]:
+            marker.drawTo(*corner)
+        self.wall_well_marker = self.root.attachNewNode(marker.create())
+        self.wall_well_marker.hide()
+
     def _add_instructions(self) -> None:
         self.instructions = OnscreenText(
-            text="1: pass and exit     2: trapped pair     SPACE: pause     R: reset",
+            text="1: pass and exit     2: trapped pair     W: wall well     H: heat reservoir     SPACE: pause     R: reset",
             pos=(-1.28, 0.92),
             scale=0.045,
             align=TextNode.ALeft,
@@ -146,7 +166,16 @@ class EnergyWell3DScene:
             particles,
             self.ARENA_SIZES,
             interaction_radius_multiplier=self.INTERACTION_RADIUS_MULTIPLIER,
+            wall_well_width=(self.WALL_WELL_WIDTH if self.wall_well_enabled else None),
+            wall_well_depth=(self.WELL_DEPTH if self.wall_well_enabled else None),
+            heat_reservoir_temperature=(
+                self.RESERVOIR_TEMPERATURE if self.heat_reservoir_enabled else None
+            ),
         )
+        if self.wall_well_enabled:
+            self.wall_well_marker.show()
+        else:
+            self.wall_well_marker.hide()
         self._sync_particle_nodes()
         self.app.taskMgr.add(self._update, "energy-well-3d-update")
 
@@ -157,7 +186,7 @@ class EnergyWell3DScene:
     def destroy(self) -> None:
         """Remove this scene before the Panda3D app switches dimensions."""
         self.app.taskMgr.remove("energy-well-3d-update")
-        for key in ("1", "2", "r", "space"):
+        for key in ("1", "2", "r", "space", "w", "h"):
             self.app.ignore(key)
         self.instructions.destroy()
         self.status.destroy()
@@ -167,6 +196,18 @@ class EnergyWell3DScene:
         self.paused = not self.paused
 
     def _reset_current_mode(self) -> None:
+        self._reset_simulation(self.mode)
+
+    def _toggle_wall_well(self) -> None:
+        self.wall_well_enabled = not self.wall_well_enabled
+        if not self.wall_well_enabled:
+            self.heat_reservoir_enabled = False
+        self._reset_simulation(self.mode)
+
+    def _toggle_heat_reservoir(self) -> None:
+        self.heat_reservoir_enabled = not self.heat_reservoir_enabled
+        if self.heat_reservoir_enabled:
+            self.wall_well_enabled = True
         self._reset_simulation(self.mode)
 
     def _update(self, task: Task) -> int:
@@ -189,14 +230,25 @@ class EnergyWell3DScene:
                     self.last_event = "Hard-sphere collision"
                 elif event.kind == "wall":
                     self.last_event = "Particle reflected from the arena wall"
+                elif event.kind == "wall_well_entry":
+                    self.last_event = "Entered attractive wall well: vertical speed increased"
+                elif event.kind == "wall_well_exit":
+                    self.last_event = "Crossed out of attractive wall well: vertical speed changed"
             self._sync_particle_nodes()
 
         first, second = self.simulation.particles
         separation = math.dist(first.position, second.position)
         state = "INSIDE WELL" if separation <= self.WELL_RADIUS else "OUTSIDE WELL"
         pause_label = "PAUSED" if self.paused else "RUNNING"
+        wall_label = "ON" if self.wall_well_enabled else "OFF"
+        reservoir_label = (
+            f"ON ({self.RESERVOIR_TEMPERATURE:.0f} K)"
+            if self.heat_reservoir_enabled
+            else "OFF"
+        )
         self.status.setText(
-            f"{self.mode_label}  |  {pause_label}  |  {state}  |  "
+            f"{self.mode_label}  |  {pause_label}  |  WALL WELL {wall_label}  |  "
+            f"RESERVOIR {reservoir_label}  |  {state}  |  "
             f"separation={separation:.2f}  |  t={self.simulation.current_time:.2f}\n"
             f"{self.last_event}"
         )

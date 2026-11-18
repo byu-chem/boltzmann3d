@@ -5,6 +5,81 @@ from boltzmann3d.physics import Particle, Simulation
 
 
 class SimulationEventLoopTests(unittest.TestCase):
+    def test_attractive_wall_well_entry_matches_java_velocity_change(self) -> None:
+        particle = Particle(
+            position=(4.0, 8.0), velocity=(1.5, -2.0), mass=2.0, radius=0.5
+        )
+        simulation = Simulation(
+            [particle], (20.0, 20.0), wall_well_width=3.0, wall_well_depth=0.0001
+        )
+
+        events = simulation.advance_to(2.5)
+
+        self.assertEqual(
+            [(event.kind, event.time) for event in events],
+            [("wall_well_entry", 2.5)],
+        )
+        self.assertEqual(particle.position, (7.75, 3.0))
+        expected_change = math.sqrt(
+            2.0 * 0.0001 * (1_000.0 / 6.02214179e23 / 1.660538782e-27) / 2.0
+        )
+        self.assertAlmostEqual(particle.velocity[0], 1.5)
+        self.assertAlmostEqual(particle.velocity[1], -2.0 - expected_change)
+
+    def test_attractive_wall_well_exit_changes_only_y_velocity(self) -> None:
+        particle = Particle(
+            position=(4.0, 2.0, 5.0), velocity=(1.5, 2.0, -0.5), mass=1.0
+        )
+        simulation = Simulation(
+            [particle], (20.0, 20.0, 20.0), wall_well_width=3.0, wall_well_depth=0.0001
+        )
+
+        events = simulation.advance_to(0.5)
+
+        self.assertEqual(
+            [(event.kind, event.time) for event in events],
+            [("wall_well_exit", 0.5)],
+        )
+        self.assertEqual(particle.position, (4.75, 3.0, 4.75))
+        self.assertEqual(particle.velocity[0], 1.5)
+        self.assertEqual(particle.velocity[2], -0.5)
+        self.assertLess(particle.velocity[1], 2.0)
+
+    def test_attractive_wall_well_requires_matching_parameters(self) -> None:
+        with self.assertRaises(ValueError):
+            Simulation(
+                [Particle(position=(1.0, 2.0), velocity=(0.0, 0.0))],
+                (10.0, 10.0),
+                wall_well_width=2.0,
+            )
+
+    def test_wall_heat_reservoir_matches_java_bounded_velocity_adjustment(self) -> None:
+        particle = Particle(
+            position=(5.0, 2.0), velocity=(3.0, -4.0), mass=2.0, radius=0.5
+        )
+        simulation = Simulation(
+            [particle],
+            (20.0, 20.0),
+            wall_well_width=3.0,
+            wall_well_depth=0.0001,
+            heat_reservoir_temperature=315.0,
+        )
+
+        events = simulation.advance_to(0.375)
+
+        self.assertEqual([(event.kind, event.time, event.axis) for event in events], [("wall", 0.375, 1)])
+        expected_change = math.sqrt(0.1 * 0.5 * 2.0 * 4.0**2 * 2.0 / 2.0)
+        self.assertAlmostEqual(particle.velocity[0], 3.0)
+        self.assertAlmostEqual(particle.velocity[1], 4.0 + expected_change)
+
+    def test_heat_reservoir_requires_a_wall_well(self) -> None:
+        with self.assertRaises(ValueError):
+            Simulation(
+                [Particle(position=(2.0, 2.0), velocity=(0.0, 0.0))],
+                (10.0, 10.0),
+                heat_reservoir_temperature=315.0,
+            )
+
     def test_next_event_selects_earliest_particle_or_wall_collision(self) -> None:
         wall_particle = Particle(position=(2.0,), velocity=(-1.0,), radius=1.0)
         collision_first = Particle(position=(3.0,), velocity=(1.0,), radius=1.0)

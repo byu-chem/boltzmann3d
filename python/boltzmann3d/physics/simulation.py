@@ -10,7 +10,8 @@ from .particle import NO_COLLISION_TIME, Particle
 
 BoundaryMode = Literal["reflecting", "periodic", "divided"]
 EventKind = Literal[
-    "particle", "wall", "wrap", "divider", "edge", "well_entry", "well_exit"
+    "particle", "wall", "wrap", "divider", "edge", "well_entry", "well_exit",
+    "wall_well_entry", "wall_well_exit",
 ]
 
 
@@ -51,6 +52,9 @@ class Simulation:
         hole_diameter: float | None = None,
         hole_open: bool = True,
         interaction_radius_multiplier: float | None = None,
+        wall_well_width: float | None = None,
+        wall_well_depth: float | None = None,
+        heat_reservoir_temperature: float | None = None,
     ):
         self.particles = list(particles)
         if boundary_mode not in ("reflecting", "periodic", "divided"):
@@ -76,6 +80,40 @@ class Simulation:
                 raise ValueError("Interaction-radius multiplier must be finite and greater than 1")
             if boundary_mode == "periodic":
                 raise ValueError("Attractive interactions are not supported with periodic boundaries")
+        if (wall_well_width is None) != (wall_well_depth is None):
+            raise ValueError("Wall well width and depth must be supplied together")
+        self.wall_well_width = (
+            None if wall_well_width is None else float(wall_well_width)
+        )
+        self.wall_well_depth = (
+            None if wall_well_depth is None else float(wall_well_depth)
+        )
+        if self.wall_well_width is not None:
+            if (
+                not math.isfinite(self.wall_well_width)
+                or self.wall_well_width <= 0.0
+            ):
+                raise ValueError("Wall well width must be finite and positive")
+            if (
+                not math.isfinite(self.wall_well_depth)
+                or self.wall_well_depth < 0.0
+            ):
+                raise ValueError("Wall well depth must be finite and nonnegative")
+            if boundary_mode == "periodic":
+                raise ValueError("Attractive wall wells require a nonperiodic arena")
+        self.heat_reservoir_temperature = (
+            None
+            if heat_reservoir_temperature is None
+            else float(heat_reservoir_temperature)
+        )
+        if self.heat_reservoir_temperature is not None:
+            if self.wall_well_width is None:
+                raise ValueError("A heat reservoir requires an attractive wall well")
+            if (
+                not math.isfinite(self.heat_reservoir_temperature)
+                or self.heat_reservoir_temperature < 0.0
+            ):
+                raise ValueError("Heat-reservoir temperature must be finite and nonnegative")
         self._inside_interaction_wells: set[tuple[int, int]] = set()
         if self.hole_diameter is not None:
             if boundary_mode != "divided":
@@ -90,6 +128,8 @@ class Simulation:
                 size <= 0 for size in self.arena_sizes
             ):
                 raise ValueError("Arena must have one, two, or three positive dimensions")
+            if self.wall_well_width is not None and len(self.arena_sizes) not in (2, 3):
+                raise ValueError("Attractive wall wells require a 2D or 3D simulation")
             self._validate_hole_size(len(self.arena_sizes))
             self.current_time = 0.0
             return
@@ -97,6 +137,8 @@ class Simulation:
         dimension = len(self.particles[0].position)
         if dimension not in (1, 2, 3):
             raise ValueError("Simulation supports one, two, or three dimensions")
+        if self.wall_well_width is not None and dimension not in (2, 3):
+            raise ValueError("Attractive wall wells require a 2D or 3D simulation")
         if any(len(particle.position) != dimension for particle in self.particles):
             raise ValueError("All particles must have the same dimension")
         if len(arena_sizes) != dimension:
@@ -449,6 +491,24 @@ class Simulation:
                     candidates.append(
                         SimulationEvent(event_time, "wall", (index,), axis)
                     )
+                if (
+                    self.wall_well_width is not None
+                    and len(particle.position) >= 2
+                    and particle.velocity[1] != 0.0
+                ):
+                    well_time = particle.time + (
+                        self.wall_well_width - particle.position[1]
+                    ) / particle.velocity[1]
+                    if well_time > particle.time:
+                        kind: EventKind | None = None
+                        if particle.velocity[1] < 0.0:
+                            kind = "wall_well_entry"
+                        elif particle.position[1] < self.wall_well_width:
+                            kind = "wall_well_exit"
+                        if kind is not None:
+                            candidates.append(
+                                SimulationEvent(well_time, kind, (index,), axis=1)
+                            )
             if self.boundary_mode == "divided":
                 divider_event = self._divider_event_for(index, particle)
                 if divider_event is not None:
@@ -555,6 +615,8 @@ class Simulation:
                     "divider": 1,
                     "well_entry": 1,
                     "well_exit": 1,
+                    "wall_well_entry": 1,
+                    "wall_well_exit": 1,
                     "edge": 2,
                     "wrap": 3,
                 }[event.kind],
@@ -582,12 +644,26 @@ class Simulation:
                 self._inside_interaction_wells.add(pair)
             elif exited:
                 self._inside_interaction_wells.discard(pair)
+        elif event.kind in ("wall_well_entry", "wall_well_exit"):
+            (particle_index,) = event.particle_indices
+            if self.wall_well_width is None or self.wall_well_depth is None:
+                raise ValueError("Wall well event has no configured well")
+            self.particles[particle_index].cross_attractive_wall_well(
+                event.time, self.wall_well_width, self.wall_well_depth
+            )
         elif event.kind == "wall":
             (particle_index,) = event.particle_indices
             if event.axis is None:
                 raise ValueError("Wall event is missing its axis")
             self.particles[particle_index].collide_with_wall(
-                event.time, self.arena_sizes, event.axis
+                event.time,
+                self.arena_sizes,
+                event.axis,
+                heat_reservoir_temperature=(
+                    self.heat_reservoir_temperature
+                    if event.axis == 1
+                    else None
+                ),
             )
         elif event.kind == "divider":
             (particle_index,) = event.particle_indices

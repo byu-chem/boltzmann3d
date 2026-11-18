@@ -6,6 +6,7 @@ import edu.byu.chem.boltzmann.model.physics.Calendar;
 import edu.byu.chem.boltzmann.model.physics.EventInfo;
 import edu.byu.chem.boltzmann.model.physics.Thermostat;
 import edu.byu.chem.boltzmann.model.physics.Wall;
+import edu.byu.chem.boltzmann.utils.Units;
 import edu.byu.chem.boltzmann.utils.data.ParticleType;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfo;
 import edu.byu.chem.boltzmann.utils.data.SimulationInfoSupplier;
@@ -41,6 +42,10 @@ public final class ParticleMovementHarness {
         testOneDimensionalElasticCollision(simulationInfo);
         testOneDimensionalCollisionPrediction(simulationInfo);
         testOneDimensionalEnergyWell(testType);
+        testTwoDimensionalEnergyWell();
+        testThreeDimensionalEnergyWell();
+        testTwoDimensionalAttractiveWallWell();
+        testTwoDimensionalWallHeatReservoir();
         testTwoDimensionalParticleCollision();
         testThreeDimensionalParticleCollision();
         testPeriodicParticleCollisionAcrossBoundary();
@@ -255,6 +260,254 @@ public final class ParticleMovementHarness {
         assertClose("trapped second velocity", trappedSecond.getXVel(), -1.0);
         System.out.println(
                 "1D energy well PASS: entry, exit, and insufficient-energy reflection match Java equations");
+    }
+
+    private static void testThreeDimensionalEnergyWell() {
+        ParticleType particleType = new ParticleType(1.0, 0.75, Color.RED, "well-test");
+        SimulationInfo wellInfo = createSimulationInfo(
+                particleType, 3, 100.0, 100.0, 100.0,
+                SimulationInfo.ArenaType.REFLECTING_BOUNDARIES,
+                0.0, false, true, 2.0, 0.0001);
+
+        Particle3D first = new Particle3D(
+                new double[]{10.0, 10.0, 10.0},
+                new double[]{20.0, 0.0, 0.0}, 0.0,
+                particleType, wellInfo);
+        Particle3D second = new Particle3D(
+                new double[]{20.0, 12.0, 11.0},
+                new double[]{-20.0, 0.0, 0.0}, 0.0,
+                particleType, wellInfo);
+
+        EventInfo entry = new EventInfo(Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+        first.predCol(second, null, entry);
+        if (entry.colType != Collision.ENTER_WELL) {
+            throw new AssertionError("expected 3D ENTER_WELL but got " + entry.colType);
+        }
+        assertClose("3D well entry time", entry.colTime, 0.2);
+
+        first.collideWith(second, entry);
+        double[] normal = unitVector(
+                second.getX() - first.getX(),
+                second.getY() - first.getY(),
+                second.getZ() - first.getZ());
+        assertTangentialVelocityPreserved(
+                "3D entry first", new double[]{20.0, 0.0, 0.0}, first, normal);
+        assertTangentialVelocityPreserved(
+                "3D entry second", new double[]{-20.0, 0.0, 0.0}, second, normal);
+        printThreeDimensionalWellState("3D well entry", entry, first, second);
+
+        EventInfo exit = new EventInfo(Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+        first.predCol(second, entry, exit);
+        if (exit.colType != Collision.EXIT_WELL) {
+            throw new AssertionError("expected 3D EXIT_WELL but got " + exit.colType);
+        }
+        first.collideWith(second, exit);
+        printThreeDimensionalWellState("3D well exit", exit, first, second);
+
+        Particle3D trappedFirst = new Particle3D(
+                new double[]{10.0, 10.0, 10.0},
+                new double[]{-5.0, -2.5, -2.5}, 0.0,
+                particleType, wellInfo);
+        Particle3D trappedSecond = new Particle3D(
+                new double[]{12.0, 11.0, 11.0},
+                new double[]{5.0, 2.5, 2.5}, 0.0,
+                particleType, wellInfo);
+        EventInfo lastEntry = new EventInfo(
+                Collision.ENTER_WELL, Calendar.MINTIME, 0, 1, 0);
+        EventInfo trappedExit = new EventInfo(
+                Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+        trappedFirst.predCol(trappedSecond, lastEntry, trappedExit);
+        if (trappedExit.colType != Collision.EXIT_WELL) {
+            throw new AssertionError(
+                    "expected predicted 3D EXIT_WELL for trapped test but got "
+                    + trappedExit.colType);
+        }
+        trappedFirst.collideWith(trappedSecond, trappedExit);
+        if (trappedExit.colType != Collision.ENTER_WELL) {
+            throw new AssertionError(
+                    "insufficient 3D exit energy should be classified as ENTER_WELL");
+        }
+        printThreeDimensionalWellState(
+                "3D trapped well reflection", trappedExit, trappedFirst, trappedSecond);
+        System.out.println(
+                "3D energy well PASS: entry, exit, trapped reflection, and tangential velocity");
+    }
+
+    private static void testTwoDimensionalEnergyWell() {
+        ParticleType particleType = new ParticleType(1.0, 0.75, Color.RED, "well-test");
+        SimulationInfo wellInfo = createSimulationInfo(
+                particleType, 2, 100.0, 100.0, 100.0,
+                SimulationInfo.ArenaType.REFLECTING_BOUNDARIES,
+                0.0, false, true, 2.0, 0.0001);
+
+        Particle2D first = new Particle2D(
+                new double[]{10.0, 10.0}, new double[]{20.0, 0.0}, 0.0,
+                particleType, wellInfo);
+        Particle2D second = new Particle2D(
+                new double[]{20.0, 12.0}, new double[]{-20.0, 0.0}, 0.0,
+                particleType, wellInfo);
+        EventInfo entry = new EventInfo(Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+        first.predCol(second, null, entry);
+        if (entry.colType != Collision.ENTER_WELL) {
+            throw new AssertionError("expected 2D ENTER_WELL but got " + entry.colType);
+        }
+        assertClose("2D well entry time", entry.colTime, (10.0 - Math.sqrt(5.0)) / 40.0);
+
+        first.collideWith(second, entry);
+        double normalX = (second.getX() - first.getX()) / 3.0;
+        double normalY = (second.getY() - first.getY()) / 3.0;
+        double tangentX = -normalY;
+        double tangentY = normalX;
+        assertClose("2D entry first tangent",
+                first.getXVel() * tangentX + first.getYVel() * tangentY,
+                20.0 * tangentX);
+        assertClose("2D entry second tangent",
+                second.getXVel() * tangentX + second.getYVel() * tangentY,
+                -20.0 * tangentX);
+        printTwoDimensionalWellState("2D well entry", entry, first, second);
+
+        EventInfo exit = new EventInfo(Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+        first.predCol(second, entry, exit);
+        if (exit.colType != Collision.EXIT_WELL) {
+            throw new AssertionError("expected 2D EXIT_WELL but got " + exit.colType);
+        }
+        first.collideWith(second, exit);
+        printTwoDimensionalWellState("2D well exit", exit, first, second);
+
+        Particle2D trappedFirst = new Particle2D(
+                new double[]{10.0, 10.0}, new double[]{-5.0, -2.5}, 0.0,
+                particleType, wellInfo);
+        Particle2D trappedSecond = new Particle2D(
+                new double[]{12.0, 11.0}, new double[]{5.0, 2.5}, 0.0,
+                particleType, wellInfo);
+        EventInfo lastEntry = new EventInfo(
+                Collision.ENTER_WELL, Calendar.MINTIME, 0, 1, 0);
+        EventInfo trappedExit = new EventInfo(
+                Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+        trappedFirst.predCol(trappedSecond, lastEntry, trappedExit);
+        if (trappedExit.colType != Collision.EXIT_WELL) {
+            throw new AssertionError(
+                    "expected predicted 2D EXIT_WELL for trapped test but got "
+                    + trappedExit.colType);
+        }
+        trappedFirst.collideWith(trappedSecond, trappedExit);
+        if (trappedExit.colType != Collision.WELL_REFLECT) {
+            throw new AssertionError("insufficient 2D exit energy should reflect inside the well");
+        }
+        printTwoDimensionalWellState(
+                "2D trapped well reflection", trappedExit, trappedFirst, trappedSecond);
+        System.out.println(
+                "2D energy well PASS: entry, exit, trapped reflection, and tangential velocity");
+    }
+
+    private static void testTwoDimensionalAttractiveWallWell() {
+        ParticleType particleType = new ParticleType(2.0, 0.5, Color.RED, "wall-test");
+        SimulationInfo wallInfo = createSimulationInfo(
+                particleType, 2, 20.0, 20.0, 20.0,
+                SimulationInfo.ArenaType.REFLECTING_BOUNDARIES,
+                0.0, false, false, 0.0, 0.0, true, 3.0, 0.0001);
+        Particle2D entering = new Particle2D(
+                new double[]{4.0, 8.0}, new double[]{1.5, -2.0}, 0.0,
+                particleType, wallInfo);
+        EventInfo entry = entering.predBoundaryCol(null, false);
+        if (entry.colType != Collision.ENTER_GRAVITY_WELL) {
+            throw new AssertionError(
+                    "expected attractive wall entry but got collision type " + entry.colType);
+        }
+        assertClose("attractive wall entry time", entry.colTime, 2.5);
+        entering.boundaryCollide(entry, null, new Thermostat(false));
+        double velocityChange = Math.sqrt(
+                Units.convert(Units.Energy.KILOJOULE_PER_MOLE,
+                        Units.Energy.AMU_JOULE, 0.0001) * 2.0 / 2.0);
+        assertClose("attractive wall entry y", entering.getY(), 3.0);
+        assertClose("attractive wall entry y velocity", entering.getYVel(), -2.0 - velocityChange);
+
+        Particle2D exiting = new Particle2D(
+                new double[]{4.0, 2.0}, new double[]{1.5, 2.0}, 0.0,
+                particleType, wallInfo);
+        EventInfo exit = exiting.predBoundaryCol(null, false);
+        if (exit.colType != Collision.EXIT_GRAVITY_WELL) {
+            throw new AssertionError(
+                    "expected attractive wall exit but got collision type " + exit.colType);
+        }
+        assertClose("attractive wall exit time", exit.colTime, 0.5);
+        exiting.boundaryCollide(exit, null, new Thermostat(false));
+        assertClose("attractive wall exit y", exiting.getY(), 3.0);
+        assertClose("attractive wall exit y velocity", exiting.getYVel(), 2.0 - velocityChange);
+        System.out.printf(Locale.ROOT,
+                "Attractive wall well PASS: entry vy=%.15g exit vy=%.15g change=%.15g%n",
+                entering.getYVel(), exiting.getYVel(), velocityChange);
+    }
+
+    private static void testTwoDimensionalWallHeatReservoir() {
+        ParticleType particleType = new ParticleType(2.0, 0.5, Color.RED, "reservoir-test");
+        SimulationInfo wallInfo = createSimulationInfo(
+                particleType, 2, 20.0, 20.0, 20.0,
+                SimulationInfo.ArenaType.REFLECTING_BOUNDARIES,
+                0.0, false, false, 0.0, 0.0,
+                true, 3.0, 0.0001, true, 315.0);
+        Particle2D particle = new Particle2D(
+                new double[]{5.0, 2.0}, new double[]{3.0, -4.0}, 0.0,
+                particleType, wallInfo);
+        EventInfo wall = particle.predBoundaryCol(null, false);
+        if (wall.colType != Collision.WALL || wall.side != Wall.BOTTOM) {
+            throw new AssertionError("expected a lower-wall reservoir collision");
+        }
+        assertClose("heat-reservoir wall time", wall.colTime, 0.375);
+        particle.boundaryCollide(wall, null, new Thermostat(false));
+
+        double targetEnergyJoules = 2.0 * 1.3806504e-23 * 315.0 / 2.0;
+        double targetEnergy = Units.convert(
+                Units.Energy.JOULE, Units.Energy.AMU_JOULE, targetEnergyJoules);
+        double maxEnergyChange = 0.5 * 2.0 * 4.0 * 4.0 * 0.1;
+        double velocityChange = Math.sqrt(2.0 * maxEnergyChange / 2.0);
+        assertClose("heat-reservoir wall x velocity", particle.getXVel(), 3.0);
+        assertClose("heat-reservoir wall y velocity", particle.getYVel(), 4.0 + velocityChange);
+        System.out.printf(Locale.ROOT,
+                "Wall heat reservoir PASS: targetKE=%.15g post-collision vy=%.15g%n",
+                targetEnergy, particle.getYVel());
+    }
+
+    private static void printTwoDimensionalWellState(
+            String label, EventInfo event, Particle2D first, Particle2D second) {
+        System.out.printf(Locale.ROOT,
+                "%s: event=%d time=%.15g p1=(%.15g,%.15g) v1=(%.15g,%.15g) "
+                        + "p2=(%.15g,%.15g) v2=(%.15g,%.15g)%n",
+                label, event.colType, event.colTime,
+                first.getX(), first.getY(), first.getXVel(), first.getYVel(),
+                second.getX(), second.getY(), second.getXVel(), second.getYVel());
+    }
+
+    private static double[] unitVector(double x, double y, double z) {
+        double magnitude = Math.sqrt(x * x + y * y + z * z);
+        return new double[]{x / magnitude, y / magnitude, z / magnitude};
+    }
+
+    private static void assertTangentialVelocityPreserved(
+            String label, double[] before, Particle3D after, double[] normal) {
+        double[] actual = {after.getXVel(), after.getYVel(), after.getZVel()};
+        double changeX = actual[0] - before[0];
+        double changeY = actual[1] - before[1];
+        double changeZ = actual[2] - before[2];
+        double normalChange = changeX * normal[0]
+                + changeY * normal[1]
+                + changeZ * normal[2];
+        assertClose(label + " tangential x", changeX - normalChange * normal[0], 0.0);
+        assertClose(label + " tangential y", changeY - normalChange * normal[1], 0.0);
+        assertClose(label + " tangential z", changeZ - normalChange * normal[2], 0.0);
+    }
+
+    private static void printThreeDimensionalWellState(
+            String label, EventInfo event, Particle3D first, Particle3D second) {
+        System.out.printf(Locale.ROOT,
+                "%s: event=%d time=%.15g p1=(%.15g,%.15g,%.15g) "
+                        + "v1=(%.15g,%.15g,%.15g) p2=(%.15g,%.15g,%.15g) "
+                        + "v2=(%.15g,%.15g,%.15g)%n",
+                label, event.colType, event.colTime,
+                first.getX(), first.getY(), first.getZ(),
+                first.getXVel(), first.getYVel(), first.getZVel(),
+                second.getX(), second.getY(), second.getZ(),
+                second.getXVel(), second.getYVel(), second.getZVel());
     }
 
     private static void testTwoDimensionalParticleCollision() {
@@ -656,6 +909,51 @@ public final class ParticleMovementHarness {
             final boolean attractiveInteractions,
             final double interactionRadiusMultiplier,
             final double energyWellDepth) {
+        return createSimulationInfo(
+                particleType, dimension, arenaXSize, arenaYSize, arenaZSize,
+                arenaType, holeDiameter, maxwellDemonMode, attractiveInteractions,
+                interactionRadiusMultiplier, energyWellDepth, false, 0.0, 0.0);
+    }
+
+    private static SimulationInfo createSimulationInfo(
+            final ParticleType particleType,
+            final int dimension,
+            final double arenaXSize,
+            final double arenaYSize,
+            final double arenaZSize,
+            final SimulationInfo.ArenaType arenaType,
+            final double holeDiameter,
+            final boolean maxwellDemonMode,
+            final boolean attractiveInteractions,
+            final double interactionRadiusMultiplier,
+            final double energyWellDepth,
+            final boolean attractiveWall,
+            final double wallWellWidth,
+            final double wallWellDepth) {
+        return createSimulationInfo(
+                particleType, dimension, arenaXSize, arenaYSize, arenaZSize,
+                arenaType, holeDiameter, maxwellDemonMode, attractiveInteractions,
+                interactionRadiusMultiplier, energyWellDepth, attractiveWall,
+                wallWellWidth, wallWellDepth, false, 0.0);
+    }
+
+    private static SimulationInfo createSimulationInfo(
+            final ParticleType particleType,
+            final int dimension,
+            final double arenaXSize,
+            final double arenaYSize,
+            final double arenaZSize,
+            final SimulationInfo.ArenaType arenaType,
+            final double holeDiameter,
+            final boolean maxwellDemonMode,
+            final boolean attractiveInteractions,
+            final double interactionRadiusMultiplier,
+            final double energyWellDepth,
+            final boolean attractiveWall,
+            final double wallWellWidth,
+            final double wallWellDepth,
+            final boolean heatReservoir,
+            final double reservoirTemperature) {
         SimulationInfoSupplier supplier = (SimulationInfoSupplier) Proxy.newProxyInstance(
                 SimulationInfoSupplier.class.getClassLoader(),
                 new Class<?>[]{SimulationInfoSupplier.class},
@@ -690,6 +988,24 @@ public final class ParticleMovementHarness {
                     }
                     if ("getEnergyWellDepth".equals(name)) {
                         return energyWellDepth;
+                    }
+                    if ("includeAttractiveWall".equals(name)) {
+                        return attractiveWall;
+                    }
+                    if ("getAttractiveWall".equals(name)) {
+                        return SimulationInfo.WallEnum.BOTTOM;
+                    }
+                    if ("getWallWellWidth".equals(name)) {
+                        return wallWellWidth;
+                    }
+                    if ("getWallWellDepth".equals(name)) {
+                        return wallWellDepth;
+                    }
+                    if ("includeHeatReservoir".equals(name)) {
+                        return heatReservoir;
+                    }
+                    if ("getInitialReservoirTemperature".equals(name)) {
+                        return reservoirTemperature;
                     }
                     if ("getNumberOfParticleTypes".equals(name)) {
                         return 1;
