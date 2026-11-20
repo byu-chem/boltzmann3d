@@ -2,7 +2,7 @@
 
 from direct.showbase.ShowBase import ShowBase
 from direct.gui.OnscreenText import OnscreenText
-from panda3d.core import TextNode, WindowProperties
+from panda3d.core import NativeWindowHandle, TextNode, WindowProperties, loadPrcFileData
 
 from .well_demo import EnergyWellScene
 from .well_demo_2d import EnergyWell2DScene
@@ -12,8 +12,25 @@ from .well_demo_3d import EnergyWell3DScene
 class BoltzmannApp(ShowBase):
     """Panda3D window for the Python desktop application."""
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, parent_window: int | None = None) -> None:
+        if parent_window is not None:
+            # Qt owns the outer window and event loop; Panda creates a child
+            # render window that is stepped by the Qt timer.
+            loadPrcFileData("boltzmann3d-qt", "window-type none\naudio-library-name null\n")
+        super().__init__(windowType="none" if parent_window is not None else None)
+
+        if parent_window is not None:
+            properties = WindowProperties()
+            properties.setParentWindow(NativeWindowHandle.makeInt(parent_window))
+            properties.setOrigin(0, 0)
+            properties.setSize(800, 600)
+            self.openWindow(
+                props=properties,
+                type="onscreen",
+                makeCamera=True,
+                requireWindow=True,
+            )
+
         window_properties = WindowProperties()
         window_properties.setTitle("Boltzmann 3D")
         self.win.requestProperties(window_properties)
@@ -32,7 +49,7 @@ class BoltzmannApp(ShowBase):
         self.accept("f1", self.switch_dimension, [1])
         self.accept("f2", self.switch_dimension, [2])
         self.accept("f3", self.switch_dimension, [3])
-        self.switch_dimension(3)
+        self.switch_dimension(2 if parent_window is not None else 3)
 
     def switch_dimension(self, dimension: int) -> None:
         """Replace the active particle scene with its requested dimension."""

@@ -50,9 +50,10 @@ This checklist tracks feature parity between the Java application and the Python
 - [ ] Generate configurable initial particle positions and velocities for realistic multi-particle simulations.
 - [ ] Add a Python simulation-settings model for particle types/counts, arena dimensions and mode, wells, reactions, piston, and thermostat options.
 - [ ] Decide whether Python must load and save Java `.set` files; implement that compatibility if it remains a requirement.
-- [ ] Build the PySide6 desktop interface for settings, simulation controls, and readouts. `python/boltzmann3d/PySide6/app.py` is currently only a stub.
-- [ ] Integrate the Panda3D renderer with the desktop interface and replace hard-coded two-particle demos with configurable simulations.
-- [ ] Add pause, resume, reset, stepping, simulation-speed, and dimension controls to the finished interface.
+- [ ] Build the full PySide6 desktop interface for settings, simulation controls, and readouts. The initial window now has menus, dimension/scenario selectors, pause/resume/reset controls, and a Matplotlib speed histogram; configurable settings and broader readouts remain.
+- [x] Embed the existing Panda3D prototype in the PySide6 desktop window.
+- [ ] Replace the hard-coded two-particle demos with configurable simulations.
+- [ ] Add stepping and simulation-speed controls. Dimension, pause/resume, and reset controls are available in the initial interface.
 
 ## Statistics, plots, and delivery
 

@@ -19,6 +19,37 @@ class SimulationEventLoopTests(unittest.TestCase):
         self.assertEqual([(event.kind, event.time) for event in events], [("particle", 1.25)])
         self.assertEqual((first.species, second.species), ("blue", "blue"))
 
+    def test_simulation_applies_reverse_reaction_at_particle_collision(self) -> None:
+        first = Particle(position=(2.0,), velocity=(3.0,), radius=0.5, species="blue")
+        second = Particle(position=(8.0,), velocity=(-1.0,), radius=0.5, species="blue")
+        simulation = Simulation(
+            [first, second],
+            (30.0,),
+            reaction_rule=ReactionRule(1.0e-6, 0.25e-6),
+        )
+
+        events = simulation.advance_to(1.25)
+
+        self.assertEqual([(event.kind, event.time) for event in events], [("particle", 1.25)])
+        self.assertEqual((first.species, second.species), ("red", "red"))
+        self.assertAlmostEqual(first.velocity[0], -1.17944947189082)
+        self.assertAlmostEqual(second.velocity[0], 3.17944947189082)
+
+    def test_suppressed_reverse_reaction_only_performs_elastic_collision(self) -> None:
+        first = Particle(position=(2.0,), velocity=(3.0,), radius=0.5, species="blue")
+        second = Particle(position=(8.0,), velocity=(-1.0,), radius=0.5, species="blue")
+        simulation = Simulation(
+            [first, second],
+            (30.0,),
+            reaction_rule=ReactionRule(1.0e-6, 0.25e-6, suppress_reverse=True),
+        )
+
+        events = simulation.advance_to(1.25)
+
+        self.assertEqual([(event.kind, event.time) for event in events], [("particle", 1.25)])
+        self.assertEqual((first.species, second.species), ("blue", "blue"))
+        self.assertEqual((first.velocity, second.velocity), ((-1.0,), (3.0,)))
+
     def test_attractive_wall_well_entry_matches_java_velocity_change(self) -> None:
         particle = Particle(
             position=(4.0, 8.0), velocity=(1.5, -2.0), mass=2.0, radius=0.5

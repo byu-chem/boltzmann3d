@@ -8,5 +8,13 @@ Contact info:
 To run Boltzmann 3D, use:
   ant run
 
-To run Boltzmann 3D in python, use:
-PYTHONPATH=python python -m boltzmann3d.panda3d.well_demo
+To install the Python desktop dependencies, use:
+  python -m pip install -r requirements.txt
+
+To run the Python desktop interface from the repository root, use:
+  PYTHONPATH=python python -m boltzmann3d.PySide6
+
+The desktop interface uses PySide6 for menus and controls, Panda3D for the
+simulation view, and Matplotlib for the particle-speed graph. The standalone
+Panda3D demos remain available, for example:
+  PYTHONPATH=python python -m boltzmann3d.panda3d.well_demo_2d

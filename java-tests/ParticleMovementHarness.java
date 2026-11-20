@@ -52,6 +52,8 @@ public final class ParticleMovementHarness {
         testTwoDimensionalAttractiveWallWell();
         testTwoDimensionalWallHeatReservoir();
         testOneDimensionalReaction();
+        testOneDimensionalReverseReaction();
+        testSuppressedReverseReaction();
         testTwoDimensionalParticleCollision();
         testThreeDimensionalParticleCollision();
         testPeriodicParticleCollisionAcrossBoundary();
@@ -509,6 +511,59 @@ public final class ParticleMovementHarness {
         System.out.printf(Locale.ROOT,
                 "1D reaction PASS: products=blue/blue velocities=(%.15g, %.15g)%n",
                 first.getXVel(), second.getXVel());
+    }
+
+    private static void testOneDimensionalReverseReaction() {
+        ParticleType red = new ParticleType(1.0, 0.5, Color.RED, "reactant");
+        ParticleType blue = new ParticleType(1.0, 0.5, Color.BLUE, "product");
+        double forwardActivationEnergy = 1.0e-6;
+        double reverseActivationEnergy = 0.25e-6;
+        SimulationInfo reactionInfo = createReactionSimulationInfo(
+                red, blue, forwardActivationEnergy, reverseActivationEnergy, false);
+        Particle1D first = new Particle1D(
+                new double[]{2.0}, new double[]{3.0}, 0.0, blue, reactionInfo);
+        Particle1D second = new Particle1D(
+                new double[]{8.0}, new double[]{-1.0}, 0.0, blue, reactionInfo);
+        EventInfo collision = new EventInfo(Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+        first.predCol(second, null, collision);
+        first.collideWith(second, collision);
+
+        if (!first.getDisplayColor().equals(Color.RED)
+                || !second.getDisplayColor().equals(Color.RED)) {
+            throw new AssertionError("reverse reaction did not convert both particles to red");
+        }
+        double deltaEnergy = Units.convert(
+                Units.Energy.KILOJOULE_PER_MOLE,
+                Units.Energy.AMU_JOULE,
+                reverseActivationEnergy - forwardActivationEnergy);
+        double postRelativeSpeed = Math.sqrt(16.0 - 2.0 * deltaEnergy / 0.5);
+        assertClose("reverse reaction first velocity", first.getXVel(), (2.0 - postRelativeSpeed) / 2.0);
+        assertClose("reverse reaction second velocity", second.getXVel(), (2.0 + postRelativeSpeed) / 2.0);
+        System.out.printf(Locale.ROOT,
+                "1D reverse reaction PASS: reactants=red/red velocities=(%.15g, %.15g)%n",
+                first.getXVel(), second.getXVel());
+    }
+
+    private static void testSuppressedReverseReaction() {
+        ParticleType red = new ParticleType(1.0, 0.5, Color.RED, "reactant");
+        ParticleType blue = new ParticleType(1.0, 0.5, Color.BLUE, "product");
+        SimulationInfo reactionInfo = createReactionSimulationInfo(
+                red, blue, 1.0e-6, 0.25e-6, true);
+        Particle1D first = new Particle1D(
+                new double[]{2.0}, new double[]{3.0}, 0.0, blue, reactionInfo);
+        Particle1D second = new Particle1D(
+                new double[]{8.0}, new double[]{-1.0}, 0.0, blue, reactionInfo);
+        EventInfo collision = new EventInfo(Collision.PARTICLE, Calendar.MAXTIME, 0, 1, 0);
+        first.predCol(second, null, collision);
+        first.collideWith(second, collision);
+
+        if (!first.getDisplayColor().equals(Color.BLUE)
+                || !second.getDisplayColor().equals(Color.BLUE)) {
+            throw new AssertionError("suppressed reverse reaction changed particle types");
+        }
+        assertClose("suppressed reverse first velocity", first.getXVel(), -1.0);
+        assertClose("suppressed reverse second velocity", second.getXVel(), 3.0);
+        System.out.println("1D suppressed reverse reaction PASS: products remain blue/blue");
     }
 
     private static SimulationInfo createReactionSimulationInfo(
